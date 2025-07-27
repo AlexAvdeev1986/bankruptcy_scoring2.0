@@ -45,3 +45,44 @@ bankruptcy_scoring/
 ├── README.md              # Документация
 ├── .env.example           # Пример конфигурации
 └── run.py                 # Точка входа
+
+
+7. Полный запуск на Fedora 42
+# 1. Установка системных пакетов
+sudo dnf update -y
+sudo dnf install -y python3.11 python3.11-pip python3.11-venv \
+                    postgresql postgresql-server postgresql-contrib \
+                    redis git gcc gcc-c++ make libpq-devel \
+                    python3.11-devel nodejs npm
+
+# 2. Настройка PostgreSQL
+sudo postgresql-setup --initdb
+sudo systemctl enable --now postgresql
+sudo -u postgres createuser -P bankruptcy_user
+sudo -u postgres createdb -O bankruptcy_user bankruptcy_scoring2.0
+
+# 3. Настройка Redis
+sudo systemctl enable --now redis
+
+# 4. Клонирование и настройка проекта
+git clone https://github.com/AlexAvdeev1986/bankruptcy_scoring2.0.git
+cd bankruptcy_scoring
+
+# 5. Создание виртуального окружения
+python3.11 -m venv venv
+source venv/bin/activate
+
+# 6. Установка зависимостей
+pip install -r requirements.txt
+playwright install chromium firefox
+playwright install-deps
+
+# 7. Настройка конфигурации
+cp .env.example .env
+# Отредактируйте .env
+
+# 8. Выполнение миграций
+alembic upgrade head
+
+# 9. Запуск
+python run.py
