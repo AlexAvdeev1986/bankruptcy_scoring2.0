@@ -4,8 +4,8 @@ import os
 
 class Settings(BaseSettings):
     # Database
-    DATABASE_URL: str = "postgresql://user:password@localhost:5432/bankruptcy_scoring"
-    DATABASE_URL_SYNC: str = "postgresql://user:password@localhost:5432/bankruptcy_scoring"
+    DATABASE_URL: str = "postgresql+asyncpg://user:password@localhost:5432/bankruptcy_scoring"
+    DATABASE_URL_SYNC: str = "postgresql+asyncpg://user:password@localhost:5432/bankruptcy_scoring"
     
     # Redis for caching and task queue
     REDIS_URL: str = "redis://localhost:6379/0"
