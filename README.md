@@ -2,49 +2,38 @@
  bankruptcy_scoring2.0
 
 bankruptcy_scoring/
-├── app/
+├── app.py                      # Основное приложение
+├── config.py                   # Конфигурация
+├── data_processing/            # Обработка данных
 │   ├── __init__.py
-│   ├── main.py                 # FastAPI приложение
-│   ├── config.py              # Конфигурация
-│   ├── database.py            # База данных
-│   ├── models.py              # SQLAlchemy модели
-│   ├── schemas.py             # Pydantic схемы
-│   ├── api/
-│   │   ├── __init__.py
-│   │   └── endpoints.py       # API эндпоинты
-│   ├── core/
-│   │   ├── __init__.py
-│   │   ├── normalization.py   # Нормализация данных
-│   │   ├── scoring.py         # Логика скоринга
-│   │   └── enrichment.py      # Обогащение данными
-│   ├── parsers/
-│   │   ├── __init__.py
-│   │   ├── base.py           # Базовый парсер
-│   │   ├── fssp.py           # ФССП парсер
-│   │   ├── fedresurs.py      # Федресурс парсер
-│   │   ├── rosreestr.py      # Росреестр парсер
-│   │   ├── courts.py         # Суды парсер
-│   │   └── nalog.py          # Налоговая парсер
-│   ├── utils/
-│   │   ├── __init__.py
-│   │   ├── proxy.py          # Управление прокси
-│   │   ├── logger.py         # Логирование
-│   │   └── validators.py     # Валидация данных
-│   └── templates/
-│       ├── index.html        # Главная страница
-│       └── logs.html         # Страница логов
-├── data/
-│   ├── input/                # Входящие CSV файлы
-│   ├── output/               # Результаты скоринга
-│   └── logs/                 # Логи
-├── migrations/               # Миграции базы данных
-├── tests/                   # Тесты
-├── docker-compose.yml       # Docker композ
-├── Dockerfile              # Docker образ
-├── requirements.txt        # Зависимости Python
-├── README.md              # Документация
-├── .env.example           # Пример конфигурации
-└── run.py                 # Точка входа
+│   ├── data_loader.py          # Загрузка данных
+│   ├── data_normalizer.py      # Нормализация данных
+│   └── deduplicator.py         # Удаление дубликатов
+├── enrichment/                 # Обогащение данных
+│   ├── __init__.py
+│   ├── enricher.py             # Основной класс обогащения
+│   ├── fssp_service.py         # Сервис ФССП
+│   ├── fedresurs_service.py    # Сервис Федресурс
+│   ├── rosreestr_service.py    # Сервис Росреестра
+│   ├── court_service.py        # Сервис судов
+│   └── tax_service.py          # Сервис налоговой
+├── scoring/                    # Расчет скоринга
+│   ├── __init__.py
+│   ├── rule_based_scorer.py    # Rule-based скоринг
+│   └── ml_scorer.py            # ML-based скоринг
+├── utils/                      # Вспомогательные утилиты
+│   ├── __init__.py
+│   ├── logger.py               # Логирование
+│   ├── proxy_rotator.py        # Ротация прокси
+│   └── file_utils.py           # Работа с файлами
+├── templates/                  # Шаблоны HTML
+│   ├── index.html              # Главная страница
+│   └── logs.html               # Страница логов
+├── static/                     # Статические файлы
+│   └── styles.css              # CSS стили
+├── requirements.txt            # Зависимости
+├── Dockerfile                  # Для контейнеризации
+└── README.md                   # Инструкции
 
 
 7. Полный запуск на Fedora 42
@@ -54,15 +43,6 @@ sudo dnf install -y python3.11 python3.11-pip python3.11-venv \
                     postgresql postgresql-server postgresql-contrib \
                     redis git gcc gcc-c++ make libpq-devel \
                     python3.11-devel nodejs npm
-
-# 2. Настройка PostgreSQL
-sudo postgresql-setup --initdb
-sudo systemctl enable --now postgresql
-sudo -u postgres createuser -P bankruptcy_user
-sudo -u postgres createdb -O bankruptcy_user bankruptcy_scoring2.0
-
-# 3. Настройка Redis
-sudo systemctl enable --now redis
 
 # 4. Клонирование и настройка проекта
 git clone https://github.com/AlexAvdeev1986/bankruptcy_scoring2.0.git
@@ -76,6 +56,33 @@ source venv/bin/activate
 pip install -r requirements.txt
 playwright install chromium firefox
 playwright install-deps
+
+# 2. Настройка PostgreSQL
+sudo -u postgres psql
+
+```bash
+CREATE USER user WITH PASSWORD 'password';
+CREATE DATABASE bankruptcy_db;
+GRANT ALL PRIVILEGES ON DATABASE bankruptcy_db TO user;
+GRANT ALL PRIVILEGES ON SCHEMA public TO "user";
+GRANT CREATE ON SCHEMA public TO "user";
+GRANT USAGE ON SCHEMA public TO "user";
+REVOKE ALL ON SCHEMA public FROM "user";
+GRANT ALL ON SCHEMA public TO "user";
+CREATE TABLE test_table(id INT);
+```
+Проверьте, что нет ограничений на уровне таблиц:```
+```bash
+\dn+ public
+```
+
+Для fedora
+sudo dnf install -y postgresql-devel python3-devel
+pip install psycopg2-binary
+4. Проверка установки
+python3 -c "import psycopg2; print(psycopg2.__version__)"
+# 3. Настройка Redis
+sudo systemctl enable --now redis
 
 # 7. Настройка конфигурации
 cp .env.example .env

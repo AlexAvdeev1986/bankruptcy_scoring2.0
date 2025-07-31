@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Логи ошибок</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Журнал ошибок</h1>
+            <a href="/" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-left"></i> На главную
+            </a>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">
+                <h2 class="h5">Файлы с ошибками</h2>
+            </div>
+            <div class="card-body">
+                {% if log_files %}
+                <div class="list-group">
+                    {% for file in log_files %}
+                    <a href="/logs/{{ file }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-text me-2"></i> {{ file }}
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Нет файлов с логами ошибок
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card mt-4">
+            <div class="card-header">
+                <h2 class="h5">Последние ошибки</h2>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>ФИО</th>
+                                <th>ИНН</th>
+                                <th>Ошибка</th>
+                                <th>Время</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for error in recent_errors %}
+                            <tr>
+                                <td>{{ error.fio }}</td>
+                                <td>{{ error.inn }}</td>
+                                <td>{{ error.error }}</td>
+                                <td>{{ error.timestamp }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center">Нет записей об ошибках</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
