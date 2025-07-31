@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система скоринга банкротств</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        .card { margin-bottom: 20px; }
+        .status-area { min-height: 100px; }
+        .form-check { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container py-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h1 class="h4"><i class="bi bi-people"></i> Система скоринга потенциальных банкротов</h1>
+            </div>
+            
+            <div class="card-body">
+                <form id="scoringForm" enctype="multipart/form-data">
+                    <div class="card mb-4">
+                        <div class="card-header">Настройки фильтрации</div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <label class="col-form-label col-md-3">География (регион):</label>
+                                <div class="col-md-9">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" id="selectAll">
+                                        <label class="form-check-label" for="selectAll">Выбрать всё</label>
+                                    </div>
+                                    <div id="regionsContainer" class="d-flex flex-wrap">
+                                        {% for region in regions %}
+                                        <div class="form-check me-3 mb-2">
+                                            <input class="form-check-input region-check" type="checkbox" 
+                                                value="{{ region }}" id="region{{ loop.index }}">
+                                            <label class="form-check-label" for="region{{ loop.index }}">
+                                                {{ region }}
+                                            </label>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <label class="col-form-label col-md-3">Сумма долга:</label>
+                                <div class="col-md-9">
+                                    <div class="input-group">
+                                        <span class="input-group-text">Минимальная сумма:</span>
+                                        <input type="number" class="form-control" 
+                                            name="min_debt" value="250000">
+                                        <span class="input-group-text">рублей</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <label class="col-form-label col-md-3">Дополнительные фильтры:</label>
+                                <div class="col-md-9">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                            name="exclude_bankrupt" id="excludeBankrupt">
+                                        <label class="form-check-label" for="excludeBankrupt">
+                                            Исключать признанных банкротов
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                            name="exclude_no_debt" id="excludeNoDebt">
+                                        <label class="form-check-label" for="excludeNoDebt">
+                                            Исключать контакты без долгов
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                            name="only_with_property" id="onlyWithProperty">
+                                        <label class="form-check-label" for="onlyWithProperty">
+                                            Только с недвижимостью
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                            name="only_bank_mfo_debts" id="onlyBankMFODebts">
+                                        <label class="form-check-label" for="onlyBankMFODebts">
+                                            Только с банковскими или МФО-долгами
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                            name="only_recent_court_orders" id="onlyRecentCourtOrders">
+                                        <label class="form-check-label" for="onlyRecentCourtOrders">
+                                            Только с судебными приказами за последние 3 месяца
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" 
+                                            name="only_active_inn" id="onlyActiveINN">
+                                        <label class="form-check-label" for="onlyActiveINN">
+                                            Только с живыми ИНН
+                                        </label>
+                                    </div>
+                                    <div class="form-check mt-3">
+                                        <input class="form-check-input" type="checkbox" 
+                                            name="use_ml_model" id="useMlModel">
+                                        <label class="form-check-label" for="useMlModel">
+                                            Использовать ML-модель для уточнения оценки
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card mb-4">
+                        <div class="card-header">Загрузка данных</div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="leadFiles" class="form-label">Выберите CSV файлы с лидами:</label>
+                                <input class="form-control" type="file" id="leadFiles" name="lead_files" multiple accept=".csv">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg" id="startBtn">
+                            <i class="bi bi-search"></i> Запустить скоринг
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Статус выполнения -->
+        <div class="card mt-4">
+            <div class="card-header">Статус выполнения</div>
+            <div class="card-body status-area" id="statusArea">
+                <div class="alert alert-info">Ожидание запуска...</div>
+            </div>
+        </div>
+        
+        <!-- Результаты -->
+        <div class="card mt-4" id="resultSection" style="display: none;">
+            <div class="card-header">Результаты</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="card-title">Скачать результат:</h5>
+                    <a id="downloadLink" class="btn btn-success">
+                        <i class="bi bi-download"></i> Скачать результат (CSV)
+                    </a>
+                </div>
+                
+                <div class="mb-3">
+                    <h5 class="card-title">Журнал логов:</h5>
+                    <a href="/logs" class="btn btn-outline-secondary">
+                        <i class="bi bi-journal-text"></i> Открыть лог ошибок
+                    </a>
+                </div>
+                
+                <div>
+                    <h5 class="card-title">Статистика по группам:</h5>
+                    <div id="groupStats" class="alert alert-secondary">
+                        Статистика будет доступна после завершения скоринга
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('scoringForm');
+            const statusArea = document.getElementById('statusArea');
+            const resultSection = document.getElementById('resultSection');
+            const downloadLink = document.getElementById('downloadLink');
+            const groupStats = document.getElementById('groupStats');
+            const selectAll = document.getElementById('selectAll');
+            const regionChecks = document.querySelectorAll('.region-check');
+            const mlCheckbox = document.getElementById('useMlModel');
+            
+            // Обработка "Выбрать всё"
+            selectAll.addEventListener('change', function() {
+                regionChecks.forEach(check => {
+                    check.checked = selectAll.checked;
+                });
+            });
+            
+            // Отправка формы
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Показать статус
+                statusArea.innerHTML = `
+                    <div class="alert alert-info">
+                        <div class="spinner-border spinner-border-sm me-2"></div>
+                        Запуск скоринга...
+                    </div>
+                `;
+                
+                // Скрыть результаты предыдущего запуска
+                resultSection.style.display = 'none';
+                groupStats.innerHTML = 'Статистика будет доступна после завершения скоринга';
+                
+                // Сбор данных формы
+                const formData = new FormData(form);
+                const regions = Array.from(document.querySelectorAll('.region-check:checked'))
+                    .map(el => el.value);
+                
+                regions.forEach(region => {
+                    formData.append('regions', region);
+                });
+                
+                try {
+                    // Отправка запроса
+                    const response = await fetch('/start-scoring', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        // Успешное завершение
+                        statusArea.innerHTML = `
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle"></i> ${result.message}
+                            </div>
+                        `;
+                        
+                        // Показать ссылку на скачивание
+                        downloadLink.href = `/download/${result.result_file}`;
+                        resultSection.style.display = 'block';
+                        
+                        // Запросить статистику по группам
+                        fetchGroupStats();
+                    } else {
+                        // Ошибка
+                        statusArea.innerHTML = `
+                            <div class="alert alert-danger">
+                                <i class="bi bi-exclamation-circle"></i> ${result.message}
+                            </div>
+                        `;
+                    }
+                } catch (error) {
+                    statusArea.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-circle"></i> Ошибка сети: ${error.message}
+                        </div>
+                    `;
+                }
+            });
+            
+            async function fetchGroupStats() {
+                try {
+                    const response = await fetch('/group-stats');
+                    const stats = await response.json();
+                    
+                    if (stats.length > 0) {
+                        let html = '<ul class="list-group">';
+                        stats.forEach(group => {
+                            html += `<li class="list-group-item d-flex justify-content-between align-items-center">
+                                ${group.name}
+                                <span class="badge bg-primary rounded-pill">${group.count}</span>
+                            </li>`;
+                        });
+                        html += '</ul>';
+                        groupStats.innerHTML = html;
+                    } else {
+                        groupStats.innerHTML = '<div class="alert alert-warning">Нет данных для отображения</div>';
+                    }
+                } catch (error) {
+                    groupStats.innerHTML = '<div class="alert alert-danger">Ошибка загрузки статистики</div>';
+                }
+            }
+        });
+    </script>
+</body>
+</html>
