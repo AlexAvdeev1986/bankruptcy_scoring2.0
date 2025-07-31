@@ -4,6 +4,11 @@
 bankruptcy_scoring/
 ├── app.py                      # Основное приложение
 ├── config.py                   # Конфигурация
+├── database/                   # Работа с базой данных
+│   ├── database.py
+│   └── migrations/
+│       ├── 001_initial.sql
+│       └── 002_add_ml_features.sql
 ├── data_processing/            # Обработка данных
 │   ├── __init__.py
 │   ├── data_loader.py          # Загрузка данных
@@ -26,13 +31,21 @@ bankruptcy_scoring/
 │   ├── logger.py               # Логирование
 │   ├── proxy_rotator.py        # Ротация прокси
 │   └── file_utils.py           # Работа с файлами
+├── ml_model/                   # Модели машинного обучения
+│   ├── model.pkl               # Обученная модель
+│   ├── train.py                # Обучение модели
+│   └── predict.py              # Прогнозирование
 ├── templates/                  # Шаблоны HTML
 │   ├── index.html              # Главная страница
 │   └── logs.html               # Страница логов
 ├── static/                     # Статические файлы
 │   └── styles.css              # CSS стили
+└── scripts/                    # Скрипты для управления
+    ├── init_db.py
+    └── run_migrations.py
 ├── requirements.txt            # Зависимости
 ├── Dockerfile                  # Для контейнеризации
+├── docker-compose.yml          # Для запуска с PostgreSQL
 └── README.md                   # Инструкции
 
 
