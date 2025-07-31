@@ -91,5 +91,129 @@ cp .env.example .env
 # 8. Выполнение миграций
 alembic upgrade head
 
-# 9. Запуск
-python run.py
+# Рекомендации по запуску:
+Установите зависимости:
+
+bash
+pip install -r requirements.txt
+Запустите веб-приложение:
+
+bash
+python app.py
+Откройте в браузере:
+
+text
+http://localhost:5000
+Для обучения ML-модели:
+
+bash
+python ml_model/train.py
+
+Для Fedora 42 может потребоваться установка дополнительных зависимостей:
+
+bash
+sudo dnf install gcc python3-devel postgresql-devel
+
+Инструкции по запуску
+1. Настройка PostgreSQL на Fedora
+# Установка PostgreSQL
+sudo dnf install postgresql-server postgresql-contrib
+
+# Инициализация БД
+sudo postgresql-setup --initdb
+
+# Запуск службы
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Настройка пользователя и базы данных
+sudo -u postgres psql <<EOF
+CREATE USER "user" WITH PASSWORD 'password';
+CREATE DATABASE bankruptcy_db;
+GRANT ALL PRIVILEGES ON DATABASE bankruptcy_db TO "user";
+ALTER DATABASE bankruptcy_db OWNER TO "user";
+GRANT ALL ON SCHEMA public TO "user";
+EOF
+
+# Настройка аутентификации
+sudo nano /var/lib/pgsql/data/pg_hba.conf
+
+# Изменить строки:
+# local   all             all                                     trust
+# host    all             all             127.0.0.1/32            trust
+# host    all             all             ::1/128                 trust
+
+# Перезапуск PostgreSQL
+sudo systemctl restart postgresql
+
+2. Запуск локально (с виртуальным окружением)
+# Установка Python и зависимостей
+sudo dnf install python3.11 python3.11-venv
+
+# Создание виртуального окружения
+python3.11 -m venv venv
+source venv/bin/activate
+
+# Установка зависимостей
+pip install -r requirements.txt
+
+# Создание .env файла
+cp .env.example .env
+nano .env  # Редактируем параметры
+
+# Инициализация базы данных
+python scripts/init_db.py
+
+# Запуск миграций
+python scripts/run_migrations.py
+
+# Обучение ML-модели (опционально)
+python ml_model/train.py
+
+# Запуск приложения
+python app.py
+
+Приложение будет доступно по адресу: http://localhost:5000
+
+3. Запуск через Podman
+
+# Установка Podman
+sudo dnf install podman
+
+# Сборка образа
+podman build -t bankruptcy-scoring .
+
+# Создание сети
+podman network create scoring-network
+
+# Запуск PostgreSQL
+podman run -d --name scoring-db \
+  --network scoring-network \
+  -e POSTGRES_USER=user \
+  -e POSTGRES_PASSWORD=password \
+  -e POSTGRES_DB=bankruptcy_db \
+  -v pgdata:/var/lib/postgresql/data \
+  docker.io/postgres:14
+
+# Запуск приложения
+podman run -d --name scoring-app \
+  --network scoring-network \
+  -p 5000:5000 \
+  -e DB_HOST=scoring-db \
+  -e DB_NAME=bankruptcy_db \
+  -e DB_USER=user \
+  -e DB_PASSWORD=password \
+  -v ./data:/app/data \
+  -v ./logs:/app/logs \
+  localhost/bankruptcy-scoring
+
+# Проверка работы
+podman logs scoring-app
+
+5. Инициализация базы данных
+bash
+# Для локального запуска
+python scripts/init_db.py
+
+# Для Docker/Podman
+podman exec scoring-app python scripts/init_db.py

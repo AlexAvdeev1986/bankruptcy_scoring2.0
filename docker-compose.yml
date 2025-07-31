@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: scoring_app
+    command: gunicorn --bind 0.0.0.0:5000 --workers 4 app:app
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "5000:5000"
+    environment:
+      - DB_HOST=db
+    depends_on:
+      - db
+    networks:
+      - scoring_network
+
+  db:
+    image: postgres:13-alpine
+    container_name: scoring_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-bankruptcy_scoring}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - scoring_network
+    ports:
+      - "5432:5432"
+
+networks:
+  scoring_network:
+
+volumes:
+  pgdata:
