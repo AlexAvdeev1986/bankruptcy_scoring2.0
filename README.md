@@ -82,11 +82,8 @@ sudo -u postgres createdb bankruptcy_db
 mkdir -p database/migrations
 mkdir -p data/uploads data/results logs/errors
 
-# Инициализация базы данных
-python scripts/init_db.py
 
-# Запуск миграций
-python scripts/run_migrations.py
+
 
 Для Fedora 42 может потребоваться установка дополнительных зависимостей:
 
@@ -116,6 +113,7 @@ ALTER DATABASE bankruptcy_db OWNER TO "user";
 GRANT ALL ON SCHEMA public TO "user";
 EOF
 
+
 Проверка прав доступа:
 
 sudo -u postgres psql -d bankruptcy_db -c "\dn+ public"
@@ -136,6 +134,15 @@ sudo systemctl restart postgresql
 
 # Проверка работы базы данных:
 psql -h localhost -U scoring_user -d bankruptcy_db -c "SELECT * FROM leads LIMIT 5;"
+
+python -m scripts.run_migrations
+
+
+# Инициализация базы данных
+python scripts/init_db.py
+
+# Запуск миграций
+python scripts/run_migrations.py
 
 # Обучение ML-модели (опционально)
 python ml_model/train.py
