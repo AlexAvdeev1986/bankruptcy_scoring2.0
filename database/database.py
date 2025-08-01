@@ -4,6 +4,7 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import DictCursor
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
@@ -12,23 +13,21 @@ class Database:
         self.conn = None
         self.logger = logging.getLogger('Database')
         self.connect()
-        self.initialize_db()
-
+    
     def connect(self):
-        """Установка соединения с БД"""
         try:
             self.conn = psycopg2.connect(
-                dbname=os.getenv('DB_NAME', 'bankruptcy_scoring'),
-                user=os.getenv('DB_USER', 'postgres'),
-                password=os.getenv('DB_PASSWORD', 'password'),
-                host=os.getenv('DB_HOST', 'localhost'),
-                port=os.getenv('DB_PORT', '5432')
+                dbname=os.getenv('DB_NAME'),
+                user=os.getenv('DB_USER'),
+                password=os.getenv('DB_PASSWORD'),
+                host=os.getenv('DB_HOST'),
+                port=os.getenv('DB_PORT')
             )
             self.logger.info("Успешное подключение к БД")
         except Exception as e:
             self.logger.error(f"Ошибка подключения к БД: {str(e)}")
             raise
-
+    
     def initialize_db(self):
         """Инициализация структуры БД"""
         try:
@@ -76,7 +75,7 @@ class Database:
                     );
                 """)
                 
-                # Индексы для ускорения поиска
+                # Индексы
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_inn ON leads(inn);")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_lead ON scoring_history(lead_id);")
@@ -88,8 +87,8 @@ class Database:
             self.logger.error(f"Ошибка инициализации БД: {str(e)}")
             raise
 
-    def save_leads(self, leads: list):
-        """Сохранение нормализованных лидов в БД"""
+    def save_leads(self, leads):
+        """Сохранение лидов в базу данных"""
         try:
             with self.conn.cursor() as cursor:
                 for lead in leads:
@@ -97,7 +96,7 @@ class Database:
                         INSERT INTO leads (
                             fio, phone, inn, dob, address, source, tags, email, normalized
                         ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, TRUE)
-                        ON CONFLICT (phone, inn) DO NOTHING;
+                        ON CONFLICT (phone) DO NOTHING;
                     """, (
                         lead.get('fio'),
                         lead.get('phone'),
@@ -114,24 +113,22 @@ class Database:
             self.conn.rollback()
             self.logger.error(f"Ошибка сохранения лидов: {str(e)}")
             raise
-
-    def save_scoring_history(self, scoring_results: list):
-        """Сохранение результатов скоринга"""
+    
+    def save_scoring_history(self, results):
+        """Сохранение результатов скоринга в историю"""
         try:
             with self.conn.cursor() as cursor:
-                for result in scoring_results:
+                for result in results:
                     # Находим lead_id по телефону
-                    cursor.execute("""
-                        SELECT lead_id FROM leads WHERE phone = %s LIMIT 1;
-                    """, (result['phone'],))
+                    cursor.execute("SELECT lead_id FROM leads WHERE phone = %s", (result['phone'],))
                     lead_row = cursor.fetchone()
+                    lead_id = lead_row[0] if lead_row else None
                     
-                    if lead_row:
-                        lead_id = lead_row[0]
+                    if lead_id:
                         cursor.execute("""
                             INSERT INTO scoring_history (
                                 lead_id, score, group_name, reason_1, reason_2, reason_3
-                            ) VALUES (%s, %s, %s, %s, %s, %s);
+                            ) VALUES (%s, %s, %s, %s, %s, %s)
                         """, (
                             lead_id,
                             result['score'],
@@ -141,20 +138,19 @@ class Database:
                             result['reason_3']
                         ))
             self.conn.commit()
-            self.logger.info(f"Сохранено {len(scoring_results)} записей истории скоринга")
+            self.logger.info(f"Сохранено {len(results)} записей в историю скоринга")
         except Exception as e:
             self.conn.rollback()
-            self.logger.error(f"Ошибка сохранения истории скоринга: {str(e)}")
+            self.logger.error(f"Ошибка сохранения истории: {str(e)}")
             raise
-
-    def save_error_log(self, error: dict, service: str):
+    
+    def save_error_log(self, error, service):
         """Сохранение ошибки в лог"""
         try:
             with self.conn.cursor() as cursor:
                 cursor.execute("""
-                    INSERT INTO error_logs (
-                        fio, inn, error, service
-                    ) VALUES (%s, %s, %s, %s);
+                    INSERT INTO error_logs (fio, inn, error, service)
+                    VALUES (%s, %s, %s, %s)
                 """, (
                     error.get('fio'),
                     error.get('inn'),
@@ -164,12 +160,36 @@ class Database:
             self.conn.commit()
         except Exception as e:
             self.logger.error(f"Ошибка сохранения лога: {str(e)}")
-
-    def close(self):
-        """Закрытие соединения с БД"""
-        if self.conn:
-            self.conn.close()
-            self.logger.info("Соединение с БД закрыто")
+    
+    def get_recent_errors(self, limit=20):
+        """Получение последних ошибок"""
+        try:
+            with self.conn.cursor(cursor_factory=DictCursor) as cursor:
+                cursor.execute("""
+                    SELECT fio, inn, error, service, occurred_at
+                    FROM error_logs
+                    ORDER BY occurred_at DESC
+                    LIMIT %s
+                """, (limit,))
+                return cursor.fetchall()
+        except Exception as e:
+            self.logger.error(f"Ошибка получения ошибок: {str(e)}")
+            return []
+    
+    def get_group_stats(self):
+        """Статистика по группам"""
+        try:
+            with self.conn.cursor() as cursor:
+                cursor.execute("""
+                    SELECT group_name, COUNT(*) as count
+                    FROM scoring_history
+                    WHERE scored_at > CURRENT_DATE - INTERVAL '7 days'
+                    GROUP BY group_name
+                """)
+                return [{'name': row[0], 'count': row[1]} for row in cursor.fetchall()]
+        except Exception as e:
+            self.logger.error(f"Ошибка получения статистики: {str(e)}")
+            return []
 
 # Синглтон для доступа к БД
 db_instance = Database()

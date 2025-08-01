@@ -3,7 +3,7 @@ import csv
 import logging
 import pandas as pd
 from datetime import datetime
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, send_file, jsonify, current_app
 from werkzeug.utils import secure_filename
 
 from data_processing.data_loader import DataLoader
@@ -15,6 +15,7 @@ from scoring.ml_scorer import predict_proba
 from utils.logger import setup_logger
 from utils.proxy_rotator import ProxyRotator
 from utils.file_utils import save_errors, save_history, prepare_output, save_results
+from database.database import db_instance  # Импорт модуля базы данных
 
 app = Flask(__name__)
 app.config.from_object('config.Config')
@@ -91,6 +92,9 @@ def process_scoring(file_paths, params):
     deduplicator = Deduplicator()
     df = deduplicator.deduplicate(df)
     
+    # Сохранение лидов в БД
+    db_instance.save_leads(df.to_dict('records'))
+    
     # Фильтрация по регионам
     if params['regions']:
         df = df[df['region'].isin(params['regions'])]
@@ -112,8 +116,14 @@ def process_scoring(file_paths, params):
                 'error': str(e)
             })
             logger.error(f"Ошибка обогащения: {lead.get('fio', '')} - {str(e)}")
+            # Сохраняем ошибку в БД
+            db_instance.save_error_log({
+                'fio': lead.get('fio', ''),
+                'inn': lead.get('inn', ''),
+                'error': str(e)
+            }, "DataEnrichment")
     
-    # Сохранение ошибок
+    # Сохранение ошибок в файл (дополнительно)
     save_errors(errors, app.config['ERROR_LOG_FOLDER'])
     
     # Шаг 3: Расчет скоринга
@@ -146,7 +156,9 @@ def process_scoring(file_paths, params):
     logger.info(f"Формирование результата, найдено {len(scoring_results)} целевых лидов")
     output_data = prepare_output(scoring_results)
     result_file = save_results(output_data, app.config['RESULT_FOLDER'])
-    save_history(output_data, app.config['HISTORY_FOLDER'])
+    
+    # Сохранение истории в БД
+    db_instance.save_scoring_history(output_data)
     
     return result_file
 
@@ -179,7 +191,11 @@ def download_file(filename):
 def view_logs():
     """Просмотр логов ошибок"""
     log_files = [f for f in os.listdir(app.config['ERROR_LOG_FOLDER']) if f.startswith('errors_')]
-    return render_template('logs.html', log_files=log_files)
+    
+    # Получаем последние ошибки из БД
+    recent_errors = db_instance.get_recent_errors(limit=50)
+    
+    return render_template('logs.html', log_files=log_files, recent_errors=recent_errors)
 
 @app.route('/logs/<filename>')
 def download_log(filename):
@@ -190,12 +206,20 @@ def download_log(filename):
         download_name=filename
     )
 
+@app.route('/group-stats')
+def group_stats():
+    """Статистика по группам"""
+    stats = db_instance.get_group_stats()
+    return jsonify(stats)
+
 if __name__ == '__main__':
     # Создание необходимых директорий
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     os.makedirs(app.config['RESULT_FOLDER'], exist_ok=True)
     os.makedirs(app.config['ERROR_LOG_FOLDER'], exist_ok=True)
-    os.makedirs(app.config['HISTORY_FOLDER'], exist_ok=True)
+    
+    # Инициализация базы данных
+    db_instance.initialize_db()
     
     app.run(host='0.0.0.0', port=5000, debug=app.config['DEBUG'])
     

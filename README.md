@@ -61,66 +61,32 @@ sudo dnf install -y python3.11 python3.11-pip python3.11-venv \
 git clone https://github.com/AlexAvdeev1986/bankruptcy_scoring2.0.git
 cd bankruptcy_scoring
 
-# 5. Создание виртуального окружения
+2. Запуск локально (с виртуальным окружением)
+# Установка Python и зависимостей
+sudo dnf install python3.11 python3.11-venv
+
+# Создание виртуального окружения
 python3.11 -m venv venv
 source venv/bin/activate
 
-# 6. Установка зависимостей
+# Установка зависимостей
 pip install -r requirements.txt
-playwright install chromium firefox
-playwright install-deps
 
-# 2. Настройка PostgreSQL
-sudo -u postgres psql
-
-```bash
-CREATE USER user WITH PASSWORD 'password';
-CREATE DATABASE bankruptcy_db;
-GRANT ALL PRIVILEGES ON DATABASE bankruptcy_db TO user;
-GRANT ALL PRIVILEGES ON SCHEMA public TO "user";
-GRANT CREATE ON SCHEMA public TO "user";
-GRANT USAGE ON SCHEMA public TO "user";
-REVOKE ALL ON SCHEMA public FROM "user";
-GRANT ALL ON SCHEMA public TO "user";
-CREATE TABLE test_table(id INT);
-```
-Проверьте, что нет ограничений на уровне таблиц:```
-```bash
-\dn+ public
-```
-
-Для fedora
-sudo dnf install -y postgresql-devel python3-devel
-pip install psycopg2-binary
-4. Проверка установки
-python3 -c "import psycopg2; print(psycopg2.__version__)"
-# 3. Настройка Redis
-sudo systemctl enable --now redis
-
-# 7. Настройка конфигурации
+# Создание .env файла
 cp .env.example .env
-# Отредактируйте .env
+nano .env  # Редактируем параметры
 
-# 8. Выполнение миграций
-alembic upgrade head
+sudo -u postgres createdb bankruptcy_db
 
-# Рекомендации по запуску:
-Установите зависимости:
+# Создайте необходимые директории
+mkdir -p database/migrations
+mkdir -p data/uploads data/results logs/errors
 
-bash
-pip install -r requirements.txt
-Запустите веб-приложение:
+# Инициализация базы данных
+python scripts/init_db.py
 
-bash
-python app.py
-Откройте в браузере:
-
-text
-http://localhost:5000
-Для обучения ML-модели:
-
-bash
-python ml_model/train.py
+# Запуск миграций
+python scripts/run_migrations.py
 
 Для Fedora 42 может потребоваться установка дополнительных зависимостей:
 
@@ -141,12 +107,21 @@ sudo systemctl enable postgresql
 
 # Настройка пользователя и базы данных
 sudo -u postgres psql <<EOF
+DROP DATABASE IF EXISTS bankruptcy_db;
+DROP USER IF EXISTS "user";
 CREATE USER "user" WITH PASSWORD 'password';
 CREATE DATABASE bankruptcy_db;
 GRANT ALL PRIVILEGES ON DATABASE bankruptcy_db TO "user";
 ALTER DATABASE bankruptcy_db OWNER TO "user";
 GRANT ALL ON SCHEMA public TO "user";
 EOF
+
+Проверка прав доступа:
+
+sudo -u postgres psql -d bankruptcy_db -c "\dn+ public"
+
+Удаление существующей базы (если она не нужна):
+sudo -u postgres psql -c "DROP DATABASE bankruptcy_db;"
 
 # Настройка аутентификации
 sudo nano /var/lib/pgsql/data/pg_hba.conf
@@ -159,26 +134,8 @@ sudo nano /var/lib/pgsql/data/pg_hba.conf
 # Перезапуск PostgreSQL
 sudo systemctl restart postgresql
 
-2. Запуск локально (с виртуальным окружением)
-# Установка Python и зависимостей
-sudo dnf install python3.11 python3.11-venv
-
-# Создание виртуального окружения
-python3.11 -m venv venv
-source venv/bin/activate
-
-# Установка зависимостей
-pip install -r requirements.txt
-
-# Создание .env файла
-cp .env.example .env
-nano .env  # Редактируем параметры
-
-# Инициализация базы данных
-python scripts/init_db.py
-
-# Запуск миграций
-python scripts/run_migrations.py
+# Проверка работы базы данных:
+psql -h localhost -U scoring_user -d bankruptcy_db -c "SELECT * FROM leads LIMIT 5;"
 
 # Обучение ML-модели (опционально)
 python ml_model/train.py
@@ -188,10 +145,51 @@ python app.py
 
 Приложение будет доступно по адресу: http://localhost:5000
 
+
+sudo -u postgres psql
+
+```bash
+CREATE USER user WITH PASSWORD 'password';
+CREATE DATABASE bankruptcy_db;
+GRANT ALL PRIVILEGES ON DATABASE bankruptcy_db TO user;
+GRANT ALL PRIVILEGES ON SCHEMA public TO "user";
+GRANT CREATE ON SCHEMA public TO "user";
+GRANT USAGE ON SCHEMA public TO "user";
+REVOKE ALL ON SCHEMA public FROM "user";
+GRANT ALL ON SCHEMA public TO "user";
+ALTER SCHEMA public OWNER TO postgres;
+DROP USER "user";
+CREATE TABLE test_table(id INT);
+```
+Проверьте, что нет ограничений на уровне таблиц:```
+```bash
+sudo -u postgres psql -d bankruptcy_db -c "\dn+ public"```
+```
+
+Для fedora
+sudo dnf install -y postgresql-devel python3-devel
+pip install psycopg2-binary
+
+Установите необходимые зависимости:
+sudo dnf install python3.11 python3.11-venv postgresql-server postgresql-contrib podman podman-compose
+
+4. Проверка установки
+python3 -c "import psycopg2; print(psycopg2.__version__)"
+# 3. Настройка Redis
+sudo systemctl enable --now redis
+
+# 7. Настройка конфигурации
+cp .env.example .env
+# Отредактируйте .env
+
+
+
+
+
 3. Запуск через Podman
 
 # Установка Podman
-sudo dnf install podman
+sudo dnf install podman podman-compose
 
 # Сборка образа
 podman build -t bankruptcy-scoring .
@@ -230,3 +228,52 @@ python scripts/init_db.py
 
 # Для Docker/Podman
 podman exec scoring-app python scripts/init_db.py
+
+
+Запуск системы
+Настройка окружения:
+
+bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+Создание .env файла:
+
+env
+DB_NAME=bankruptcy_db
+DB_USER=user
+DB_PASSWORD=password
+DB_HOST=localhost
+DB_PORT=5432
+DEBUG=True
+SECRET_KEY=secret
+UPLOAD_FOLDER=./data/uploads
+RESULT_FOLDER=./data/results
+ERROR_LOG_FOLDER=./logs/errors
+LOG_FILE=./logs/app.log
+PROXY_LIST="http://proxy1:port,http://proxy2:port"
+Инициализация БД:
+
+bash
+python scripts/init_db.py
+Запуск миграций:
+
+bash
+python scripts/run_migrations.py
+Обучение модели (опционально):
+
+bash
+python ml_model/train.py
+Запуск приложения:
+
+bash
+python app.py
+Система будет доступна по адресу: http://localhost:5000
+
+Запуск через Podman
+bash
+# Сборка образа
+podman build -t bankruptcy-scoring .
+
+# Запуск с PostgreSQL
+podman-compose up
