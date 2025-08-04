@@ -1,3 +1,4 @@
+import resource
 import joblib
 import pandas as pd
 from datetime import datetime  # Добавлен импорт
@@ -5,6 +6,9 @@ import numpy as np
 import logging
 import os
 from config import Config
+
+
+resource.setrlimit(resource.RLIMIT_STACK, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
 
 # Настройка логгера
 logger = logging.getLogger('MLScorer')
