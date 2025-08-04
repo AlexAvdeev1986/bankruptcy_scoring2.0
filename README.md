@@ -196,15 +196,17 @@ psql -h localhost -U scoring_user -d bankruptcy_db -c "SELECT * FROM leads LIMIT
 
 python -m scripts.run_migrations
 
+# Запуск миграций
+python scripts/run_migrations.py
 
 # Инициализация базы данных
 python scripts/init_db.py
 
-# Запуск миграций
-python scripts/run_migrations.py
-
 # Обучение ML-модели (опционально)
 python ml_model/train.py
+
+# 2. Проверим размер файла модели
+ls -lh ml_model/model.pkl
 
 # Запуск приложения
 python app.py

@@ -1,5 +1,6 @@
 import os
 import csv
+import sys
 import logging
 import pandas as pd
 import concurrent.futures
@@ -37,7 +38,11 @@ app = Flask(__name__)
 app.config.from_object('config.Config')
 
 # Настройка логгера
-logger = setup_logger('scoring_system', app.config['LOG_FILE'])
+logger = logging.getLogger('scoring_system')
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
 
 # Инициализация компонентов
 proxy_rotator = ProxyRotator(app.config['PROXY_LIST'])
