@@ -83,8 +83,6 @@ mkdir -p database/migrations
 mkdir -p data/uploads data/results logs/errors
 
 
-
-
 Для Fedora 42 может потребоваться установка дополнительных зависимостей:
 
 bash
@@ -102,15 +100,32 @@ sudo postgresql-setup --initdb
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
 
+# Настройка аутентификации
+sudo nano /var/lib/pgsql/data/pg_hba.conf
+
+# Изменить строки:
+# "local" is for Unix domain socket connections only
+local   all             postgres                                peer
+local   all             all                                     md5
+host    all             all             127.0.0.1/32            md5
+host    all             all             ::1/128                 md5
+host    all             all             0.0.0.0/0               md5
+local   replication     all                                     peer
+host    replication     all             127.0.0.1/32            md5
+host    replication     all             ::1/128                 md5
+
+
+# Установите пароль для пользователя postgres
+sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'secure_password';"
+
 # Настройка пользователя и базы данных
+
 sudo -u postgres psql <<EOF
-DROP DATABASE IF EXISTS bankruptcy_db;
-DROP USER IF EXISTS "user";
-CREATE USER "user" WITH PASSWORD 'password';
-CREATE DATABASE bankruptcy_db;
-GRANT ALL PRIVILEGES ON DATABASE bankruptcy_db TO "user";
-ALTER DATABASE bankruptcy_db OWNER TO "user";
-GRANT ALL ON SCHEMA public TO "user";
+CREATE USER scoring_user WITH PASSWORD 'secure_password';
+CREATE DATABASE bankruptcy_scoring;
+GRANT ALL PRIVILEGES ON DATABASE bankruptcy_scoring TO scoring_user;
+ALTER DATABASE bankruptcy_scoring OWNER TO scoring_user;
+GRANT ALL ON SCHEMA public TO scoring_user;
 EOF
 
 
@@ -121,13 +136,9 @@ sudo -u postgres psql -d bankruptcy_db -c "\dn+ public"
 Удаление существующей базы (если она не нужна):
 sudo -u postgres psql -c "DROP DATABASE bankruptcy_db;"
 
-# Настройка аутентификации
-sudo nano /var/lib/pgsql/data/pg_hba.conf
+DROP DATABASE IF EXISTS bankruptcy_db;
+DROP USER IF EXISTS "user";
 
-# Изменить строки:
-# local   all             all                                     trust
-# host    all             all             127.0.0.1/32            trust
-# host    all             all             ::1/128                 trust
 
 # Перезапуск PostgreSQL
 sudo systemctl restart postgresql
