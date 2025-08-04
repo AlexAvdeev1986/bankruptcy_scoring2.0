@@ -6,26 +6,24 @@ from catboost import CatBoostClassifier
 from sklearn.model_selection import train_test_split
 import joblib
 import traceback
+import numpy as np
 
 # Добавляем корень проекта в путь для корректного импорта модулей
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(PROJECT_ROOT)
 
-# Настройка логгера с более детальной конфигурацией
+# Настройка логгера
 logger = logging.getLogger('model_trainer')
 logger.setLevel(logging.DEBUG)
 
-# Форматирование логов
 formatter = logging.Formatter(
     '%(asctime)s - %(name)s - %(levelname)s - %(module)s - %(message)s'
 )
 
-# Консольный вывод
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
 console_handler.setFormatter(formatter)
 
-# Файловый вывод
 log_file = os.path.join(PROJECT_ROOT, 'logs', 'model_training.log')
 file_handler = logging.FileHandler(log_file)
 file_handler.setLevel(logging.DEBUG)
@@ -34,7 +32,6 @@ file_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
-# Импортируем модуль базы данных после настройки пути
 try:
     from database.database import db_instance
     logger.info("Импорт модуля базы данных выполнен успешно")
@@ -88,6 +85,23 @@ def fetch_training_data():
             logger.debug("Соединение с БД закрыто")
     
     return df
+
+def generate_sample_data():
+    """Генерация синтетических данных для обучения"""
+    logger.info("Генерация синтетических данных")
+    n_samples = 1000
+    np.random.seed(42)
+    
+    data = {
+        'debt_amount': np.random.exponential(scale=300000, size=n_samples),
+        'debt_count': np.random.randint(1, 10, size=n_samples),
+        'has_property': np.random.randint(0, 2, size=n_samples),
+        'has_court_order': np.random.randint(0, 2, size=n_samples),
+        'is_inn_active': np.random.randint(0, 2, size=n_samples),
+        'is_bankrupt': np.random.randint(0, 2, size=n_samples),
+        'target': np.random.randint(0, 2, size=n_samples)
+    }
+    return pd.DataFrame(data)
 
 def preprocess_data(df):
     """
@@ -197,9 +211,10 @@ def main():
         # Шаг 1: Получение данных
         df = fetch_training_data()
         
+        # Если данных нет, используем синтетические
         if df.empty:
-            logger.error("Нет данных для обучения. Процесс остановлен.")
-            return False
+            logger.warning("Реальных данных нет. Используются синтетические данные.")
+            df = generate_sample_data()
         
         # Шаг 2: Предобработка данных
         X_train, X_test, y_train, y_test = preprocess_data(df)
