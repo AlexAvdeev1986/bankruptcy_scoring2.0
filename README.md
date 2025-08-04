@@ -1,5 +1,7 @@
-# bankruptcy_scoring2.0
+<img width="4863" height="3006" alt="work_sistem" src="https://github.com/user-attachments/assets/023606e7-5f67-4561-add2-53cce1f5e372" /># bankruptcy_scoring2.0
  bankruptcy_scoring2.0
+
+
 
 bankruptcy_scoring/
 ├── app.py                      # Основное приложение
