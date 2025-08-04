@@ -4,20 +4,35 @@ import logging
 import pandas as pd
 import concurrent.futures
 from datetime import datetime
-from flask import Flask, render_template, request, send_file, jsonify, current_app
+from flask import Flask, render_template, request, send_file, jsonify
 from werkzeug.utils import secure_filename, safe_join
 
+# Импорты для обработки данных
 from data_processing.data_loader import DataLoader
 from data_processing.data_normalizer import DataNormalizer
 from data_processing.deduplicator import Deduplicator
+
+# Импорты для обогащения данных
 from enrichment.enricher import DataEnricher
+from enrichment.fedresurs_service import FedresursService
+from enrichment.fssp_service import FSSPService
+from enrichment.tax_service import TaxService
+from enrichment.rosreestr_service import RosreestrService
+from enrichment.court_service import CourtService
+
+# Импорты для скоринга
 from scoring.rule_based_scorer import calculate_score, assign_group
 from scoring.ml_scorer import predict_proba
+
+# Утилиты
 from utils.logger import setup_logger
 from utils.proxy_rotator import ProxyRotator
 from utils.file_utils import save_errors, prepare_output, save_results
-from database import db_instance  # Импорт модуля базы данных
 
+# База данных
+from database.database import db_instance
+
+# Инициализация приложения
 app = Flask(__name__)
 app.config.from_object('config.Config')
 
@@ -240,6 +255,7 @@ if __name__ == '__main__':
     os.makedirs(app.config['ERROR_LOG_FOLDER'], exist_ok=True)
     
     # Инициализация базы данных
+    db_instance.initialize()
     db_instance.initialize_db()
     
     app.run(host='0.0.0.0', port=5000, debug=app.config['DEBUG'])

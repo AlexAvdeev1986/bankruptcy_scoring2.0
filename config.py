@@ -38,5 +38,5 @@ class Config:
     COURT_URL = 'https://sudrf.ru/index.php'
     
     # Настройки ML модели
-    ML_MODEL_PATH = os.path.join(BASE_DIR, 'scoring', 'model.pkl')
+    ML_MODEL_PATH = os.path.join(BASE_DIR, 'ml_model', 'model.pkl')
     

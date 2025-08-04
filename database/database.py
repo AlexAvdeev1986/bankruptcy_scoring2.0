@@ -4,6 +4,7 @@ import psycopg2
 from psycopg2 import sql
 from psycopg2.extras import DictCursor, execute_values
 from datetime import datetime
+from dotenv import load_dotenv
 
 class Database:
     _instance = None
@@ -25,7 +26,7 @@ class Database:
                 dbname=os.getenv('DB_NAME', 'bankruptcy_scoring'),
                 user=os.getenv('DB_USER', 'postgres'),
                 password=os.getenv('DB_PASSWORD', 'secure_password'),
-                host=os.getenv('DB_HOST', 'db'),
+                host=os.getenv('DB_HOST', 'localhost'),
                 port=os.getenv('DB_PORT', '5432')
             )
             self.logger.info("Успешное подключение к БД")

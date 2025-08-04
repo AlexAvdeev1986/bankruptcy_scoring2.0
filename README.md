@@ -79,7 +79,6 @@ nano .env  # Редактируем параметры
 sudo -u postgres createdb bankruptcy_db
 
 # Создайте необходимые директории
-mkdir -p database/migrations
 mkdir -p data/uploads data/results logs/errors
 
 
@@ -185,6 +184,11 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO scoring_user;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO scoring_user;
 "
 
+Проверка данных в БД:
+
+sudo -u postgres psql -d bankruptcy_scoring -c "SELECT * FROM scoring_history;"
+
+
 # Проверка работы базы данных:
 psql -h localhost -U scoring_user -d bankruptcy_db -c "SELECT * FROM leads LIMIT 5;"
 
@@ -206,134 +210,10 @@ python app.py
 Приложение будет доступно по адресу: http://localhost:5000
 
 
-sudo -u postgres psql
-
-```bash
-CREATE USER user WITH PASSWORD 'password';
-CREATE DATABASE bankruptcy_db;
-GRANT ALL PRIVILEGES ON DATABASE bankruptcy_db TO user;
-GRANT ALL PRIVILEGES ON SCHEMA public TO "user";
-GRANT CREATE ON SCHEMA public TO "user";
-GRANT USAGE ON SCHEMA public TO "user";
-REVOKE ALL ON SCHEMA public FROM "user";
-GRANT ALL ON SCHEMA public TO "user";
-ALTER SCHEMA public OWNER TO postgres;
-DROP USER "user";
-CREATE TABLE test_table(id INT);
-```
-Проверьте, что нет ограничений на уровне таблиц:```
-```bash
-sudo -u postgres psql -d bankruptcy_db -c "\dn+ public"```
-```
-
-Для fedora
-sudo dnf install -y postgresql-devel python3-devel
-pip install psycopg2-binary
-
-Установите необходимые зависимости:
-sudo dnf install python3.11 python3.11-venv postgresql-server postgresql-contrib podman podman-compose
-
-4. Проверка установки
-python3 -c "import psycopg2; print(psycopg2.__version__)"
-# 3. Настройка Redis
-sudo systemctl enable --now redis
-
-# 7. Настройка конфигурации
-cp .env.example .env
-# Отредактируйте .env
-
-
-
-
-
-3. Запуск через Podman
-
-# Установка Podman
-sudo dnf install podman podman-compose
-
-# Сборка образа
-podman build -t bankruptcy-scoring .
-
-# Создание сети
-podman network create scoring-network
-
-# Запуск PostgreSQL
-podman run -d --name scoring-db \
-  --network scoring-network \
-  -e POSTGRES_USER=user \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=bankruptcy_db \
-  -v pgdata:/var/lib/postgresql/data \
-  docker.io/postgres:14
-
-# Запуск приложения
-podman run -d --name scoring-app \
-  --network scoring-network \
-  -p 5000:5000 \
-  -e DB_HOST=scoring-db \
-  -e DB_NAME=bankruptcy_db \
-  -e DB_USER=user \
-  -e DB_PASSWORD=password \
-  -v ./data:/app/data \
-  -v ./logs:/app/logs \
-  localhost/bankruptcy-scoring
-
-# Проверка работы
-podman logs scoring-app
-
-5. Инициализация базы данных
-bash
-# Для локального запуска
-python scripts/init_db.py
-
-# Для Docker/Podman
-podman exec scoring-app python scripts/init_db.py
-
-
-Запуск системы
-Настройка окружения:
-
-bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-Создание .env файла:
-
-env
-DB_NAME=bankruptcy_db
-DB_USER=user
-DB_PASSWORD=password
-DB_HOST=localhost
-DB_PORT=5432
-DEBUG=True
-SECRET_KEY=secret
-UPLOAD_FOLDER=./data/uploads
-RESULT_FOLDER=./data/results
-ERROR_LOG_FOLDER=./logs/errors
-LOG_FILE=./logs/app.log
-PROXY_LIST="http://proxy1:port,http://proxy2:port"
-Инициализация БД:
-
-bash
-python scripts/init_db.py
-Запуск миграций:
-
-bash
-python scripts/run_migrations.py
-Обучение модели (опционально):
-
-bash
-python ml_model/train.py
-Запуск приложения:
-
-bash
-python app.py
-Система будет доступна по адресу: http://localhost:5000
-
-Запуск через Podman
-bash
-# Сборка образа
-podman build -t bankruptcy-scoring .
-
-# Запуск с PostgreSQL
-podman-compose up
+# Важные директории проекта
+Директория	Назначение
+data/uploads/	Загружаем CSV-файлы
+data/results/	Результаты скоринга (CSV)
+logs/errors/	Логи ошибок
+ml_model/	ML-модели
+database/migrations/	SQL-скрипты миграций
