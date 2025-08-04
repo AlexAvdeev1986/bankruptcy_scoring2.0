@@ -12,33 +12,10 @@ def save_errors(errors: list, log_folder: str):
         os.makedirs(log_folder, exist_ok=True)
         
         with open(error_path, 'w', newline='', encoding='utf-8') as f:
-            fieldnames = ['fio', 'inn', 'error']
+            fieldnames = ['fio', 'inn', 'error', 'service']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(errors)
-
-def save_history(results: list, history_folder: str):
-    """Сохранение истории скоринга"""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    history_path = os.path.join(history_folder, 'scoring_history.csv')
-    
-    os.makedirs(history_folder, exist_ok=True)
-    
-    with open(history_path, 'a', newline='', encoding='utf-8') as f:
-        fieldnames = ['phone', 'fio', 'score', 'group', 'timestamp']
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        
-        if f.tell() == 0:
-            writer.writeheader()
-        
-        for row in results:
-            writer.writerow({
-                'phone': row['phone'],
-                'fio': row['fio'],
-                'score': row['score'],
-                'group': row['group'],
-                'timestamp': timestamp
-            })
 
 def prepare_output(scoring_results: list) -> list:
     """Подготовка данных для выгрузки"""

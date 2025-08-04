@@ -35,12 +35,12 @@ class DataNormalizer:
             df['source'] = df['source_file'].apply(self.detect_source)
             df['tags'] = df['source'].apply(self.get_tags)
         
-        return df
+        return df.dropna(subset=['fio', 'phone'])
 
     def normalize_phone(self, phone: str) -> str:
         """Нормализация телефона в формат +7XXXXXXXXXX"""
         if pd.isna(phone) or not phone:
-            return ''
+            return None
         
         try:
             # Удаление всех нецифровых символов, кроме плюса
@@ -64,14 +64,14 @@ class DataNormalizer:
                     phonenumbers.PhoneNumberFormat.E164
                 )
             
-            return phone
+            return None
         except:
-            return phone
+            return None
 
     def normalize_fio(self, fio: str) -> str:
         """Нормализация ФИО: приведение к верхнему регистру и удаление лишних пробелов"""
         if pd.isna(fio) or not fio:
-            return ''
+            return None
         
         # Удаление лишних пробелов и приведение к верхнему регистру
         fio = ' '.join(str(fio).strip().split()).upper()
@@ -79,12 +79,12 @@ class DataNormalizer:
         # Удаление некириллических символов (кроме пробела и дефиса)
         fio = re.sub(r'[^А-ЯЁ\s-]', '', fio)
         
-        return fio
+        return fio if len(fio) > 2 else None
 
     def extract_region(self, address: str) -> str:
         """Извлечение региона из адреса"""
         if pd.isna(address) or not address:
-            return ''
+            return None
         
         address_lower = address.lower()
         
@@ -93,7 +93,7 @@ class DataNormalizer:
             if region_pattern in address_lower:
                 return region_name
         
-        return ''
+        return None
 
     def detect_source(self, filename: str) -> str:
         """Определение источника по имени файла"""

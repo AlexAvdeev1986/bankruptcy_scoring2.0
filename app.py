@@ -2,9 +2,10 @@ import os
 import csv
 import logging
 import pandas as pd
+import concurrent.futures
 from datetime import datetime
 from flask import Flask, render_template, request, send_file, jsonify, current_app
-from werkzeug.utils import secure_filename
+from werkzeug.utils import secure_filename, safe_join
 
 from data_processing.data_loader import DataLoader
 from data_processing.data_normalizer import DataNormalizer
@@ -14,8 +15,8 @@ from scoring.rule_based_scorer import calculate_score, assign_group
 from scoring.ml_scorer import predict_proba
 from utils.logger import setup_logger
 from utils.proxy_rotator import ProxyRotator
-from utils.file_utils import save_errors, save_history, prepare_output, save_results
-from database.database import db_instance  # Импорт модуля базы данных
+from utils.file_utils import save_errors, prepare_output, save_results
+from database import db_instance  # Импорт модуля базы данных
 
 app = Flask(__name__)
 app.config.from_object('config.Config')
@@ -55,7 +56,7 @@ def start_scoring():
         for file in request.files.getlist('lead_files'):
             if file.filename:
                 filename = secure_filename(file.filename)
-                file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                file_path = safe_join(app.config['UPLOAD_FOLDER'], filename)
                 file.save(file_path)
                 file_paths.append(file_path)
                 logger.info(f"Файл {filename} успешно загружен")
@@ -73,7 +74,7 @@ def start_scoring():
         })
     
     except Exception as e:
-        logger.error(f"Ошибка запуска скоринга: {str(e)}")
+        logger.error(f"Ошибка запуска скоринга: {str(e)}", exc_info=True)
         return jsonify({
             'status': 'error',
             'message': f'Ошибка при запуске скоринга: {str(e)}'
@@ -92,72 +93,79 @@ def process_scoring(file_paths, params):
     deduplicator = Deduplicator()
     df = deduplicator.deduplicate(df)
     
-    # Сохранение лидов в БД
-    db_instance.save_leads(df.to_dict('records'))
-    
     # Фильтрация по регионам
     if params['regions']:
         df = df[df['region'].isin(params['regions'])]
     
-    # Шаг 2: Обогащение данных
-    logger.info(f"Начато обогащение данных для {len(df)} лидов")
+    # Конвертация в список словарей для дальнейшей обработки
+    leads = df.to_dict('records')
+    
+    # Шаг 2: Обогащение данных (параллельная обработка)
+    logger.info(f"Начато обогащение данных для {len(leads)} лидов")
     enriched_data = []
     errors = []
     
-    for idx, row in df.iterrows():
+    def enrich_lead(lead):
         try:
-            lead = row.to_dict()
-            enriched = data_enricher.enrich(lead)
-            enriched_data.append(enriched)
+            return data_enricher.enrich(lead)
         except Exception as e:
             errors.append({
                 'fio': lead.get('fio', ''),
                 'inn': lead.get('inn', ''),
-                'error': str(e)
+                'error': str(e),
+                'service': 'DataEnrichment'
             })
             logger.error(f"Ошибка обогащения: {lead.get('fio', '')} - {str(e)}")
-            # Сохраняем ошибку в БД
-            db_instance.save_error_log({
-                'fio': lead.get('fio', ''),
-                'inn': lead.get('inn', ''),
-                'error': str(e)
-            }, "DataEnrichment")
+            return lead
     
-    # Сохранение ошибок в файл (дополнительно)
-    save_errors(errors, app.config['ERROR_LOG_FOLDER'])
+    # Параллельная обработка с ограничением потоков
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        results = executor.map(enrich_lead, leads)
+        enriched_data = [result for result in results if result is not None]
+    
+    # Сохранение ошибок в БД
+    for error in errors:
+        db_instance.save_error_log(error)
     
     # Шаг 3: Расчет скоринга
     logger.info("Расчет скоринга")
     scoring_results = []
     for lead in enriched_data:
-        score, reasons = calculate_score(lead, params['min_debt'])
-        
-        # Применение ML-модели если выбрано
-        if params['use_ml_model']:
-            ml_score = predict_proba(lead)
-            # Комбинируем rule-based и ML оценки
-            final_score = (score * 0.7) + (ml_score * 0.3)
-            lead['ml_score'] = ml_score
-            reasons.append(f"ML-оценка: {ml_score:.0f}")
-            score = final_score
-        
-        lead['score'] = min(100, max(0, int(score)))
-        lead['reasons'] = reasons
-        lead['is_target'] = 1 if score >= 50 else 0
-        lead['group'] = assign_group(lead)
-        
-        # Применение фильтров
-        if should_exclude_lead(lead, params):
-            continue
+        try:
+            score, reasons = calculate_score(lead, params['min_debt'])
             
-        scoring_results.append(lead)
+            # Применение ML-модели если выбрано
+            if params['use_ml_model']:
+                ml_score = predict_proba(lead)
+                # Комбинируем rule-based и ML оценки
+                final_score = (score * 0.7) + (ml_score * 0.3)
+                lead['ml_score'] = ml_score
+                reasons.append(f"ML-оценка: {ml_score:.0f}")
+                score = final_score
+            
+            lead['score'] = min(100, max(0, int(score)))
+            lead['reasons'] = reasons
+            lead['is_target'] = 1 if score >= 50 else 0
+            lead['group'] = assign_group(lead)
+            
+            # Применение фильтров
+            if should_exclude_lead(lead, params):
+                continue
+                
+            scoring_results.append(lead)
+        except Exception as e:
+            logger.error(f"Ошибка скоринга для лида {lead.get('fio', '')}: {str(e)}")
+    
+    # Сортировка по убыванию скоринга
+    scoring_results.sort(key=lambda x: x['score'], reverse=True)
     
     # Шаг 4: Формирование результата
     logger.info(f"Формирование результата, найдено {len(scoring_results)} целевых лидов")
     output_data = prepare_output(scoring_results)
     result_file = save_results(output_data, app.config['RESULT_FOLDER'])
     
-    # Сохранение истории в БД
+    # Сохранение в БД
+    db_instance.save_leads(scoring_results)
     db_instance.save_scoring_history(output_data)
     
     return result_file
@@ -181,8 +189,14 @@ def should_exclude_lead(lead, params):
 @app.route('/download/<filename>')
 def download_file(filename):
     """Скачивание результата"""
+    safe_filename = secure_filename(filename)
+    file_path = safe_join(app.config['RESULT_FOLDER'], safe_filename)
+    
+    if not os.path.exists(file_path):
+        return "Файл не найден", 404
+    
     return send_file(
-        os.path.join(app.config['RESULT_FOLDER'], filename),
+        file_path,
         as_attachment=True,
         download_name='scoring_ready.csv'
     )
@@ -190,7 +204,8 @@ def download_file(filename):
 @app.route('/logs')
 def view_logs():
     """Просмотр логов ошибок"""
-    log_files = [f for f in os.listdir(app.config['ERROR_LOG_FOLDER']) if f.startswith('errors_')]
+    log_files = [f for f in os.listdir(app.config['ERROR_LOG_FOLDER']) 
+                 if f.startswith('errors_') and f.endswith('.csv')]
     
     # Получаем последние ошибки из БД
     recent_errors = db_instance.get_recent_errors(limit=50)
@@ -200,10 +215,16 @@ def view_logs():
 @app.route('/logs/<filename>')
 def download_log(filename):
     """Скачивание файла лога"""
+    safe_filename = secure_filename(filename)
+    file_path = safe_join(app.config['ERROR_LOG_FOLDER'], safe_filename)
+    
+    if not os.path.exists(file_path):
+        return "Файл не найден", 404
+    
     return send_file(
-        os.path.join(app.config['ERROR_LOG_FOLDER'], filename),
+        file_path,
         as_attachment=True,
-        download_name=filename
+        download_name=safe_filename
     )
 
 @app.route('/group-stats')

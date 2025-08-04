@@ -19,7 +19,21 @@ class DataEnricher:
         self.tax_service = TaxService(proxy_rotator, config)
     
     def enrich(self, lead: dict) -> dict:
-        """Обогащение данных лида"""
+        """Обогащение данных лида с обработкой ошибок"""
+        services = [
+            self.fssp_service,
+            self.fedresurs_service,
+            self.rosreestr_service,
+            self.court_service,
+            self.tax_service
+        ]
+        
+        for service in services:
+            try:
+                lead = service.enrich(lead)
+            except Exception as e:
+                self.logger.error(f"Ошибка в {service.__class__.__name__}: {str(e)}")
+       
         # Обогащение из ФССП
         lead = self.fssp_service.enrich(lead)
         

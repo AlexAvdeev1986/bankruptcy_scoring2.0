@@ -31,8 +31,13 @@ def train_model():
     df = fetch_training_data()
     
     if df.empty:
+        logger.error("Нет данных для обучения модели")
         raise ValueError("Нет данных для обучения модели")
-    
+    # Проверка качества данных
+    if df.isnull().sum().sum() > 0:
+        logger.warning("Обнаружены пропущенные значения в данных")
+        df = df.fillna(0)
+        
     # Подготовка данных
     X = df.drop('target', axis=1)
     y = df['target']

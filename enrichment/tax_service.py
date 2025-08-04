@@ -73,9 +73,9 @@ class TaxService:
                     time.sleep(random.uniform(1, 2))
         
         except Exception as e:
-            self.logger.error(f"Ошибка TaxService: {str(e)}")
-        
-        return lead
+            self.logger.error(f"Критическая ошибка TaxService: {str(e)}", exc_info=True)
+        finally:
+            return lead
 
     def parse_response(self, data: dict) -> dict:
         """Парсинг JSON ответа налоговой службы"""

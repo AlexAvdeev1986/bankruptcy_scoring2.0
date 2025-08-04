@@ -24,7 +24,7 @@ class Config:
     ]
     
     # Прокси (в реальности нужно брать из внешнего источника)
-    PROXY_LIST = [
+    PROXY_LIST = os.environ.get('PROXY_LIST', '').split(',') or [
         'http://user:pass@192.168.1.1:8080',
         'http://user:pass@192.168.1.2:8080',
         # ... минимум 300 прокси
