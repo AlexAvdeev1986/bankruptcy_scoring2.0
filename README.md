@@ -99,6 +99,7 @@ sudo postgresql-setup --initdb
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
 
+
 # Настройка аутентификации
 sudo nano /var/lib/pgsql/data/pg_hba.conf
 
@@ -120,6 +121,16 @@ sudo systemctl restart postgresql
 # Установите пароль для пользователя postgres
 sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'secure_password';"
 
+
+# Перейдите в режим администратора PostgreSQL:
+
+bash
+sudo -u postgres psql
+В интерактивном режиме psql выполните:
+
+sql
+ALTER USER scoring_user WITH PASSWORD 'new_password';
+
 # Настройка пользователя и базы данных
 
 sudo -u postgres psql <<EOF
@@ -130,12 +141,13 @@ ALTER DATABASE bankruptcy_scoring OWNER TO scoring_user;
 GRANT ALL ON SCHEMA public TO scoring_user;
 EOF
 
-
+# Перезапуск PostgreSQL
+sudo systemctl restart postgresql
 Проверка прав доступа:
 
 sudo -u postgres psql -d bankruptcy_db -c "\dn+ public"
 
-# Удаление существующей базы (если она не нужна):
+# (если нужно) Удаление существующей базы (если нужно):
 sudo -u postgres psql -c "DROP DATABASE bankruptcy_db;"
 
 sudo -u postgres psql <<EOF
@@ -143,8 +155,35 @@ DROP DATABASE IF EXISTS bankruptcy_db;
 DROP USER IF EXISTS "user";
 EOF
 
-# Перезапуск PostgreSQL
-sudo systemctl restart postgresql
+# Применение миграций вручную
+Шаг 1: Применение начальной миграции (001_initial.sql)
+bash
+sudo -u postgres psql -d bankruptcy_scoring -f database/migrations/001_initial.sql
+Шаг 2: Применение миграции для ML-фич (002_add_ml_features.sql)
+bash
+sudo -u postgres psql -d bankruptcy_scoring -f database/migrations/002_add_ml_features.sql
+Шаг 3: Проверка созданных таблиц
+bash
+sudo -u postgres psql -d bankruptcy_scoring -c "\dt"
+
+Теперь вы должны увидеть:
+
+text
+           List of relations
+ Schema |     Name      | Type  |    Owner    
+--------+---------------+-------+-------------
+ public | error_logs    | table | scoring_user
+ public | leads         | table | scoring_user
+ public | scoring_history | table | scoring_user
+
+Проверка прав доступа
+Убедимся, что пользователь scoring_user имеет права на таблицы:
+
+bash
+sudo -u postgres psql -d bankruptcy_scoring -c "
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO scoring_user;
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO scoring_user;
+"
 
 # Проверка работы базы данных:
 psql -h localhost -U scoring_user -d bankruptcy_db -c "SELECT * FROM leads LIMIT 5;"
