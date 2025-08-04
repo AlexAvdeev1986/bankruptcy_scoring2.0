@@ -92,7 +92,6 @@ sudo dnf install gcc python3-devel postgresql-devel
 1. Настройка PostgreSQL на Fedora
 # Установка PostgreSQL
 sudo dnf install postgresql-server postgresql-contrib
-
 # Инициализация БД
 sudo postgresql-setup --initdb
 
@@ -114,6 +113,9 @@ local   replication     all                                     peer
 host    replication     all             127.0.0.1/32            md5
 host    replication     all             ::1/128                 md5
 
+# Перезапуск PostgreSQL
+sudo systemctl restart postgresql
+
 
 # Установите пароль для пользователя postgres
 sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'secure_password';"
@@ -133,12 +135,13 @@ EOF
 
 sudo -u postgres psql -d bankruptcy_db -c "\dn+ public"
 
-Удаление существующей базы (если она не нужна):
+# Удаление существующей базы (если она не нужна):
 sudo -u postgres psql -c "DROP DATABASE bankruptcy_db;"
 
+sudo -u postgres psql <<EOF
 DROP DATABASE IF EXISTS bankruptcy_db;
 DROP USER IF EXISTS "user";
-
+EOF
 
 # Перезапуск PostgreSQL
 sudo systemctl restart postgresql
