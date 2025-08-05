@@ -125,10 +125,11 @@ class Database:
                     True
                 ) for lead in leads]
                 
+                # В методе save_leads
                 query = """
                     INSERT INTO leads (
-                        fio, phone, inn, dob, address, source, tags, email, 
-                        debt_amount, debt_count, has_property, has_court_order, 
+                        fio, phone, inn, dob, address, source, tags, email,
+                        debt_amount, debt_count, has_property, has_court_order,
                         is_inn_active, is_bankrupt, normalized
                     ) VALUES %s
                     ON CONFLICT (phone) DO UPDATE SET
@@ -145,8 +146,8 @@ class Database:
                         has_court_order = EXCLUDED.has_court_order,
                         is_inn_active = EXCLUDED.is_inn_active,
                         is_bankrupt = EXCLUDED.is_bankrupt,
-                        normalized = EXCLUDED.normalized
-                """
+                        normalized = TRUE
+                """ 
                 
                 execute_values(cursor, query, data)
                 

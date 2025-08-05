@@ -12,6 +12,8 @@ services:
       - "5000:5000"
     environment:
       - DB_HOST=db
+      - MOCK_MODE=${MOCK_MODE:-false}  # Добавлено
+      - PROXY_LIST=${PROXY_LIST:-}     # Добавлено
     depends_on:
       - db
     networks:

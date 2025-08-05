@@ -1,13 +1,22 @@
 import joblib
 import pandas as pd
 from datetime import datetime
-import numpy as np
 import logging
 import os
 from config import Config
 
 # Настройка логгера
 logger = logging.getLogger('MLScorer')
+
+# Стандартный порядок признаков
+ML_FEATURES = [
+    'debt_amount',
+    'debt_count',
+    'has_property',
+    'has_court_order',
+    'is_inn_active',
+    'is_bankrupt'
+]
 
 model = None
 
@@ -16,12 +25,11 @@ def load_model():
     if model is None:
         model_path = Config.ML_MODEL_PATH
         try:
-            # Проверяем, существует ли файл и не пустой ли он
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 1024:  # > 1KB
+            if os.path.exists(model_path) and os.path.getsize(model_path) > 1024:
                 model = joblib.load(model_path)
                 logger.info("ML модель успешно загружена")
             else:
-                logger.error(f"Файл модели не найден, пуст или слишком мал: {model_path}")
+                logger.error(f"Файл модели не найден или пуст: {model_path}")
                 model = None
         except Exception as e:
             logger.error(f"Ошибка загрузки ML модели: {str(e)}")
@@ -30,7 +38,6 @@ def load_model():
 
 def predict_proba(lead):
     """Прогнозирование с использованием ML-модели"""
-    # Fallback если модель не загружена
     model = load_model()
     if model is None:
         logger.warning("Используется fallback-оценка (50)")
@@ -49,15 +56,18 @@ def predict_proba(lead):
             today = datetime.today()
             return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
         
-        # Подготовка признаков
-        features = pd.DataFrame([{
+        # Подготовка признаков в правильном порядке
+        feature_data = {
             'debt_amount': lead.get('debt_amount', 0),
             'debt_count': lead.get('debt_count', 0),
             'has_property': 1 if lead.get('has_property') else 0,
-            'is_inn_active': 1 if lead.get('is_inn_active') else 0,
             'has_court_order': 1 if lead.get('has_court_order') else 0,
-            'age': calculate_age(lead.get('dob'))
-        }])
+            'is_inn_active': 1 if lead.get('is_inn_active') else 0,
+            'is_bankrupt': 1 if lead.get('is_bankrupt') else 0
+        }
+        
+        # Создание DataFrame с фиксированным порядком столбцов
+        features = pd.DataFrame([feature_data], columns=ML_FEATURES)
         
         # Предсказание
         probability = model.predict_proba(features)[0][1]

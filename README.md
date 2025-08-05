@@ -11,6 +11,7 @@ bankruptcy_scoring/
 │   └── migrations/
 │       ├── 001_initial.sql
 │       └── 002_add_ml_features.sql
+│       └── 003_add_normalized.sql  # Новая миграция
 ├── data_processing/            # Обработка данных
 │   ├── __init__.py
 │   ├── data_loader.py          # Загрузка данных
@@ -194,8 +195,6 @@ sudo -u postgres psql -d bankruptcy_scoring -c "SELECT * FROM scoring_history;"
 # Проверка работы базы данных:
 psql -h localhost -U scoring_user -d bankruptcy_db -c "SELECT * FROM leads LIMIT 5;"
 
-python -m scripts.run_migrations
-
 # Запуск миграций
 python scripts/run_migrations.py
 
@@ -213,6 +212,13 @@ python app.py
 
 Приложение будет доступно по адресу: http://localhost:5000
 
+# Режим разработки с заглушками
+export MOCK_MODE=true
+python app.py
+
+# Production режим
+export MOCK_MODE=false
+python app.py
 
 # Важные директории проекта
 Директория	Назначение

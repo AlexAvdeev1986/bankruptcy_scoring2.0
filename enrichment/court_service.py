@@ -1,3 +1,4 @@
+import os
 import requests
 import logging
 import time
@@ -12,11 +13,14 @@ class CourtService:
         self.logger = logging.getLogger('CourtService')
         self.base_url = config['COURT_URL']
         self.retry_count = 3
-        self.timeout = 30
+        self.timeout = 60
         self.cache = {}
+        self.mock_mode = os.getenv('MOCK_MODE', 'false').lower() == 'true'
     
     def enrich(self, lead: dict) -> dict:
         """Проверка наличия судебных приказов"""
+        if self.mock_mode:
+            return self.mock_enrich(lead)
         # Инициализация полей
         lead.setdefault('has_court_order', False)
         lead.setdefault('has_recent_court_order', False)
@@ -114,3 +118,19 @@ class CourtService:
         
         return result
     
+    def mock_enrich(self, lead: dict) -> dict:
+        """Заглушка для тестового режима"""
+        # Генерация реалистичных тестовых данных
+        self.logger.info("Используется mock-режим для CourtService")
+        
+        # 30% вероятности наличия судебного приказа
+        has_court_order = random.random() < 0.3
+        
+        # 50% из них будут свежими
+        has_recent_court_order = has_court_order and random.random() < 0.5
+        
+        return {
+            'has_court_order': has_court_order,
+            'has_recent_court_order': has_recent_court_order
+        }
+        

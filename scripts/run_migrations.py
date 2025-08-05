@@ -21,8 +21,9 @@ def main():
     
     # Получение списка файлов миграций
     migrations = sorted(
-        [f for f in os.listdir(migrations_dir) if f.endswith('.sql')],
-        key=lambda x: int(x.split('_')[0])
+    [f for f in os.listdir(migrations_dir) 
+     if f.endswith('.sql') and f.split('_')[0].isdigit()],
+    key=lambda x: int(x.split('_')[0])
     )
     
     logger.info(f"Найдено {len(migrations)} миграций")
