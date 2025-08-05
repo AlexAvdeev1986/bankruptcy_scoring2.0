@@ -10,6 +10,20 @@ class DataLoader:
             try:
                 df = pd.read_csv(file_path)
                 df['source_file'] = os.path.basename(file_path)
+                
+                # Создаем столбец address из city, street, house, apartment
+                df['address'] = df.apply(
+                    lambda row: ', '.join(
+                        filter(None, [
+                            str(row.get('city', '')),
+                            str(row.get('street', '')),
+                            str(row.get('house', '')),
+                            str(row.get('apartment', ''))
+                        ])
+                    ), 
+                    axis=1
+                )
+                
                 dfs.append(df)
             except Exception as e:
                 raise Exception(f"Ошибка загрузки файла {file_path}: {str(e)}")

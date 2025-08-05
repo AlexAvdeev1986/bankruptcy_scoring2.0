@@ -38,6 +38,11 @@ app = Flask(__name__)
 app.config.from_object('config.Config')
 
 # Настройка логгера
+logger = setup_logger(
+    name='scoring_system',
+    log_level=app.config['LOG_LEVEL'],  # Используем новый параметр
+    log_file=app.config['LOG_FILE']     # Путь к файлу лога
+)
 logger = logging.getLogger('scoring_system')
 logger.setLevel(logging.INFO)
 handler = logging.StreamHandler(sys.stdout)

@@ -7,6 +7,7 @@ from sklearn.model_selection import train_test_split
 import joblib
 import traceback
 import numpy as np
+import shutil
 
 # Добавляем корень проекта в путь для корректного импорта модулей
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
@@ -160,15 +161,15 @@ def train_and_save_model(X_train, X_test, y_train, y_test):
     try:
         # Параметры модели
         model_params = {
-            'iterations': 1000,
+            'iterations': 100,
             'learning_rate': 0.05,
-            'depth': 8,
+            'depth': 6,
             'l2_leaf_reg': 3,
             'eval_metric': 'AUC',
-            'early_stopping_rounds': 50,
-            'verbose': 100,
+            'early_stopping_rounds': 20,
+            'verbose': 50,
             'random_seed': 42,
-            'task_type': 'CPU'  # Можно изменить на GPU, если доступно
+            'task_type': 'CPU'
         }
         
         # Создание и обучение модели
@@ -186,10 +187,18 @@ def train_and_save_model(X_train, X_test, y_train, y_test):
         
         # Сохранение модели
         model_path = os.path.join(os.path.dirname(__file__), 'model.pkl')
+        model_dir = os.path.dirname(model_path)
         
-        # Используем контекстный менеджер для безопасного сохранения
-        with open(model_path, 'wb') as model_file:
-            joblib.dump(model, model_file, protocol=4)  # protocol=4 для совместимости
+        # Создаем директорию, если её нет
+        os.makedirs(model_dir, exist_ok=True)
+        
+        # Создаем временный файл
+        temp_path = model_path + '.tmp'
+        with open(temp_path, 'wb') as model_file:
+            joblib.dump(model, model_file, protocol=4)
+        
+        # Перемещаем временный файл в окончательное место
+        shutil.move(temp_path, model_path)
             
         logger.info(f"Модель успешно сохранена в {model_path}")
         logger.info(f"Размер файла модели: {os.path.getsize(model_path) / 1024 / 1024:.2f} MB")

@@ -13,6 +13,7 @@ class Config:
     
     # Файл логов
     LOG_FILE = os.path.join(BASE_DIR, 'logs', 'scoring_system.log')
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')  # Новый параметр
     
     # Максимальный размер файла (50MB)
     MAX_CONTENT_LENGTH = 50 * 1024 * 1024
@@ -23,11 +24,10 @@ class Config:
         'Московская область', 'Краснодарский край', 'Свердловская область'
     ]
     
-    # Прокси (в реальности нужно брать из внешнего источника)
+    # Прокси
     PROXY_LIST = os.environ.get('PROXY_LIST', '').split(',') or [
         'http://user:pass@192.168.1.1:8080',
         'http://user:pass@192.168.1.2:8080',
-        # ... минимум 300 прокси
     ]
     
     # Настройки внешних сервисов

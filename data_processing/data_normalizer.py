@@ -83,10 +83,10 @@ class DataNormalizer:
 
     def extract_region(self, address: str) -> str:
         """Извлечение региона из адреса"""
-        if pd.isna(address) or not address:
+        if pd.isna(address) or not address or address == 'nan':
             return None
         
-        address_lower = address.lower()
+        address_lower = str(address).lower()
         
         # Поиск региона в адресе
         for region_pattern, region_name in self.region_mapping.items():

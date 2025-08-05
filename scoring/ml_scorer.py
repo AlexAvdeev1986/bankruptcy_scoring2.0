@@ -17,11 +17,11 @@ def load_model():
         model_path = Config.ML_MODEL_PATH
         try:
             # Проверяем, существует ли файл и не пустой ли он
-            if os.path.exists(model_path) and os.path.getsize(model_path) > 0:
+            if os.path.exists(model_path) and os.path.getsize(model_path) > 1024:  # > 1KB
                 model = joblib.load(model_path)
                 logger.info("ML модель успешно загружена")
             else:
-                logger.error(f"Файл модели не найден или пуст: {model_path}")
+                logger.error(f"Файл модели не найден, пуст или слишком мал: {model_path}")
                 model = None
         except Exception as e:
             logger.error(f"Ошибка загрузки ML модели: {str(e)}")
@@ -42,7 +42,10 @@ def predict_proba(lead):
             if not dob:
                 return 40
             if isinstance(dob, str):
-                dob = datetime.strptime(dob, "%Y-%m-%d")
+                try:
+                    dob = datetime.strptime(dob, "%Y-%m-%d")
+                except ValueError:
+                    return 40
             today = datetime.today()
             return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
         
@@ -65,14 +68,11 @@ def predict_proba(lead):
 
 # Попытка загрузки модели при импорте
 try:
-    model_path = Config.ML_MODEL_PATH
-    if os.path.exists(model_path) and os.path.getsize(model_path) > 0:
-        model = joblib.load(model_path)
+    load_model()
+    if model:
         logger.info("ML модель успешно загружена при инициализации")
     else:
-        logger.warning("Файл модели не найден или пуст")
-        model = None
+        logger.warning("Модель не загружена")
 except Exception as e:
     logger.error(f"Ошибка при загрузке модели: {str(e)}")
-    model = None
     
