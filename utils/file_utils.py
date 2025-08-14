@@ -19,11 +19,14 @@ def save_errors(errors: list, log_folder: str):
 
 def prepare_output(scoring_results: list) -> list:
     """Подготовка данных для выгрузки"""
+    if not scoring_results:
+        return []
+    
     output_data = []
     for lead in scoring_results:
         output_data.append({
             'phone': lead['phone'],
-            'fio': lead['fio'],
+            'fio': lead.get('fio', ''),
             'score': lead['score'],
             'reason_1': lead['reasons'][0] if len(lead['reasons']) > 0 else '',
             'reason_2': lead['reasons'][1] if len(lead['reasons']) > 1 else '',
@@ -41,8 +44,17 @@ def save_results(output_data: list, result_folder: str) -> str:
     
     os.makedirs(result_folder, exist_ok=True)
     
+    # Создаем пустой файл, если нет данных
+    if not output_data:
+        with open(result_path, 'w', newline='', encoding='utf-8') as f:
+            f.write("Нет данных, удовлетворяющих критериям фильтрации")
+        return result_filename
+    
+    # Определяем заголовки из первого элемента
+    fieldnames = output_data[0].keys()
+    
     with open(result_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=output_data[0].keys())
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(output_data)
     

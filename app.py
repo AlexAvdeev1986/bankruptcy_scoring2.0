@@ -40,8 +40,8 @@ app.config.from_object('config.Config')
 # Настройка логгера
 logger = setup_logger(
     name='scoring_system',
-    log_level=app.config['LOG_LEVEL'],  # Используем новый параметр
-    log_file=app.config['LOG_FILE']     # Путь к файлу лога
+    log_level=app.config['LOG_LEVEL'],
+    log_file=app.config['LOG_FILE']
 )
 logger = logging.getLogger('scoring_system')
 logger.setLevel(logging.INFO)
@@ -125,8 +125,8 @@ def process_scoring(file_paths, params):
     deduplicator = Deduplicator()
     df = deduplicator.deduplicate(df)
     
-    # Фильтрация по регионам
-    if params['regions']:
+    # Фильтрация по регионам (если есть столбец region)
+    if params['regions'] and 'region' in df.columns:
         df = df[df['region'].isin(params['regions'])]
     
     # Конвертация в список словарей для дальнейшей обработки
@@ -141,13 +141,18 @@ def process_scoring(file_paths, params):
         try:
             return data_enricher.enrich(lead)
         except Exception as e:
+            # Используем телефон, если ФИО нет
+            fio = lead.get('fio', '')
+            if not fio:
+                fio = f"Телефон: {lead.get('phone', '')}"
+                
             errors.append({
-                'fio': lead.get('fio', ''),
+                'fio': fio,
                 'inn': lead.get('inn', ''),
                 'error': str(e),
                 'service': 'DataEnrichment'
             })
-            logger.error(f"Ошибка обогащения: {lead.get('fio', '')} - {str(e)}")
+            logger.error(f"Ошибка обогащения: {fio} - {str(e)}")
             return lead
     
     # Параллельная обработка с ограничением потоков
@@ -186,19 +191,31 @@ def process_scoring(file_paths, params):
                 
             scoring_results.append(lead)
         except Exception as e:
-            logger.error(f"Ошибка скоринга для лида {lead.get('fio', '')}: {str(e)}")
+            # Используем телефон, если ФИО нет
+            fio = lead.get('fio', '')
+            if not fio:
+                fio = f"Телефон: {lead.get('phone', '')}"
+            logger.error(f"Ошибка скоринга для лида {fio}: {str(e)}")
     
     # Сортировка по убыванию скоринга
     scoring_results.sort(key=lambda x: x['score'], reverse=True)
     
     # Шаг 4: Формирование результата
-    logger.info(f"Формирование результата, найдено {len(scoring_results)} целевых лидов")
-    output_data = prepare_output(scoring_results)
-    result_file = save_results(output_data, app.config['RESULT_FOLDER'])
-    
-    # Сохранение в БД
-    db_instance.save_leads(scoring_results)
-    db_instance.save_scoring_history(output_data)
+    if scoring_results:
+        logger.info(f"Формирование результата, найдено {len(scoring_results)} целевых лидов")
+        output_data = prepare_output(scoring_results)
+        result_file = save_results(output_data, app.config['RESULT_FOLDER'])
+        
+        # Сохранение в БД
+        db_instance.save_leads(scoring_results)
+        db_instance.save_scoring_history(output_data)
+    else:
+        logger.info("Нет лидов, удовлетворяющих критериям фильтрации")
+        # Создаем пустой файл с информационным сообщением
+        result_file = "no_results.csv"
+        no_results_path = safe_join(app.config['RESULT_FOLDER'], result_file)
+        with open(no_results_path, 'w', encoding='utf-8') as f:
+            f.write("Нет данных, удовлетворяющих критериям фильтрации")
     
     return result_file
 
@@ -230,7 +247,7 @@ def download_file(filename):
     return send_file(
         file_path,
         as_attachment=True,
-        download_name='scoring_ready.csv'
+        download_name='scoring_result.csv'
     )
 
 @app.route('/logs')

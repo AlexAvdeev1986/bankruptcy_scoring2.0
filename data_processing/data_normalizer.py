@@ -19,27 +19,42 @@ class DataNormalizer:
     def normalize(self, df: pd.DataFrame) -> pd.DataFrame:
         """Нормализация данных в DataFrame"""
         # Проверка обязательных столбцов
-        if 'fio' not in df.columns or 'phone' not in df.columns:
-            raise ValueError("Отсутствуют обязательные столбцы fio и phone")
+        if 'phone' not in df.columns:
+            raise ValueError("Отсутствует обязательный столбец phone")
         
         # Применение функций нормализации к каждому столбцу
-        if 'phone' in df.columns:
-            df['phone'] = df['phone'].apply(self.normalize_phone)
+        df['phone'] = df['phone'].apply(self.normalize_phone)
         
+        # Обработка опциональных полей
         if 'fio' in df.columns:
             df['fio'] = df['fio'].apply(self.normalize_fio)
-        
+        else:
+            df['fio'] = None  # Создаем пустой столбец
+            
         if 'dob' in df.columns:
             df['dob'] = pd.to_datetime(df['dob'], errors='coerce')
-        
+        else:
+            df['dob'] = None
+            
         if 'address' in df.columns:
             df['region'] = df['address'].apply(self.extract_region)
+        else:
+            df['region'] = None
+            
+        # Инициализация булевых полей, если их нет
+        for bool_col in ['has_property', 'has_court_order', 'is_inn_active', 'is_bankrupt']:
+            if bool_col not in df.columns:
+                df[bool_col] = False
         
         if 'source_file' in df.columns:
             df['source'] = df['source_file'].apply(self.detect_source)
             df['tags'] = df['source'].apply(self.get_tags)
+        else:
+            df['source'] = 'Другое'
+            df['tags'] = 'другое'
         
-        return df.dropna(subset=['fio', 'phone'])
+        # Удаляем только строки без телефона
+        return df.dropna(subset=['phone'])
 
     def normalize_phone(self, phone: str) -> str:
         """Нормализация телефона в формат +7XXXXXXXXXX"""

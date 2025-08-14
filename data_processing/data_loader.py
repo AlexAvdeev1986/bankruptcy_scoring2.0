@@ -12,12 +12,15 @@ class DataLoader:
             'телефон': 'phone',
             'mobile': 'phone',
             'телефонный номер': 'phone',
+            'phone_number': 'phone',
+            'номер телефона': 'phone',
             'date_of_birth': 'dob',
             'дата рождения': 'dob',
             'город': 'city',
             'улица': 'street',
             'дом': 'house',
-            'квартира': 'apartment'
+            'квартира': 'apartment',
+            'property': 'has_property'
         }
     
     def load_data(self, file_paths: List[str]) -> pd.DataFrame:
@@ -33,24 +36,32 @@ class DataLoader:
                 df.rename(columns=lambda x: self.column_mapping.get(
                     re.sub(r'\s+', '', x.lower()), x), inplace=True)
                 
-                # Проверка обязательных полей
-                required = ['fio', 'phone']
-                if not all(col in df.columns for col in required):
-                    missing = [col for col in required if col not in df.columns]
-                    raise ValueError(f"Отсутствуют обязательные столбцы: {', '.join(missing)}")
+                # Проверка обязательных полей (только phone)
+                if 'phone' not in df.columns:
+                    raise ValueError("Отсутствует обязательный столбец phone")
                 
-                # Создаем столбец address из city, street, house, apartment
-                df['address'] = df.apply(
-                    lambda row: ', '.join(
-                        filter(None, [
-                            str(row.get('city', '')),
-                            str(row.get('street', '')),
-                            str(row.get('house', '')),
-                            str(row.get('apartment', ''))
-                        ])
-                    ), 
-                    axis=1
-                )
+                # Создаем столбец address из city, street, house, apartment (если есть)
+                address_components = ['city', 'street', 'house', 'apartment']
+                if any(comp in df.columns for comp in address_components):
+                    df['address'] = df.apply(
+                        lambda row: ', '.join(
+                            filter(None, [
+                                str(row.get('city', '')),
+                                str(row.get('street', '')),
+                                str(row.get('house', '')),
+                                str(row.get('apartment', ''))
+                            ])
+                        ), 
+                        axis=1
+                    )
+                
+                # Обработка булевых полей
+                for bool_col in ['has_property', 'has_court_order', 'is_inn_active', 'is_bankrupt']:
+                    if bool_col in df.columns:
+                        # Преобразуем строковые значения в булевы
+                        df[bool_col] = df[bool_col].apply(
+                            lambda x: str(x).lower() in ['true', '1', 'yes', 'да'] if pd.notnull(x) else False
+                        )
                 
                 dfs.append(df)
             except Exception as e:
