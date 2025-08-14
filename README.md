@@ -130,7 +130,7 @@ sudo -u postgres psql
 В интерактивном режиме psql выполните:
 
 sql
-ALTER USER scoring_user WITH PASSWORD 'new_password';
+ALTER USER scoring_user WITH PASSWORD 'secure_password';
 
 # Настройка пользователя и базы данных
 
