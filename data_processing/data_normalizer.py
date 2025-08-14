@@ -18,6 +18,10 @@ class DataNormalizer:
     
     def normalize(self, df: pd.DataFrame) -> pd.DataFrame:
         """Нормализация данных в DataFrame"""
+        # Проверка обязательных столбцов
+        if 'fio' not in df.columns or 'phone' not in df.columns:
+            raise ValueError("Отсутствуют обязательные столбцы fio и phone")
+        
         # Применение функций нормализации к каждому столбцу
         if 'phone' in df.columns:
             df['phone'] = df['phone'].apply(self.normalize_phone)

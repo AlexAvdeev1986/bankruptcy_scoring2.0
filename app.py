@@ -89,8 +89,15 @@ def start_scoring():
         if not file_paths:
             return jsonify({'status': 'error', 'message': 'Не загружены файлы с данными'}), 400
         
-        # Запуск процесса скоринга
-        result_file = process_scoring(file_paths, params)
+        try:
+            # Запуск процесса скоринга
+            result_file = process_scoring(file_paths, params)
+        except Exception as e:
+            logger.error(f"Ошибка обработки данных: {str(e)}", exc_info=True)
+            return jsonify({
+                'status': 'error',
+                'message': f'Ошибка в данных: {str(e)}'
+            }), 400
         
         return jsonify({
             'status': 'success',
