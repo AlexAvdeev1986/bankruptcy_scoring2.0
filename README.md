@@ -97,7 +97,6 @@ sudo dnf install postgresql-server postgresql-contrib
 # Инициализация БД
 sudo postgresql-setup --initdb
 
-# Запуск службы
 sudo systemctl start postgresql
 sudo systemctl enable postgresql
 
@@ -158,12 +157,17 @@ DROP USER IF EXISTS "user";
 EOF
 
 # Применение миграций вручную
-Шаг 1: Применение начальной миграции (001_initial.sql)
-bash
-sudo -u postgres psql -d bankruptcy_scoring -f database/migrations/001_initial.sql
-Шаг 2: Применение миграции для ML-фич (002_add_ml_features.sql)
-bash
-sudo -u postgres psql -d bankruptcy_scoring -f database/migrations/002_add_ml_features.sql
+sudo -u postgres psql -d bankruptcy_db -f database/migrations/001_initial.sql
+
+sudo -u postgres psql -d bankruptcy_db -f database/migrations/002_add_ml_features.sql
+
+sudo -u postgres psql -d bankruptcy_db -f database/migrations/003_add_normalized.sql
+
+
+предоставьте права:
+
+sudo -u postgres psql -d bankruptcy_db -c "GRANT ALL PRIVILEGES ON TABLE leads TO scoring_user;"
+
 Шаг 3: Проверка созданных таблиц
 bash
 sudo -u postgres psql -d bankruptcy_scoring -c "\dt"
@@ -194,6 +198,10 @@ sudo -u postgres psql -d bankruptcy_scoring -c "SELECT * FROM scoring_history;"
 
 # Проверка работы базы данных:
 psql -h localhost -U scoring_user -d bankruptcy_db -c "SELECT * FROM leads LIMIT 5;"
+
+pass
+
+new_password
 
 # Запуск миграций
 python scripts/run_migrations.py
