@@ -123,7 +123,7 @@ sudo systemctl restart postgresql
 sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'secure_password';"
 
 
-# Перейдите в режим администратора PostgreSQL:
+# Если возникают проблеммы Перейдите в режим администратора PostgreSQL:
 
 bash
 sudo -u postgres psql
