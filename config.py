@@ -4,6 +4,15 @@ class Config:
     DEBUG = os.environ.get('DEBUG', 'False') == 'True'
     SECRET_KEY = os.environ.get('SECRET_KEY', 'secret_key')
     
+    # Новые настройки
+    COURT_TIMEOUT = 25  # Таймаут для судебного сервиса
+    COURT_RETRIES = 4   # Количество попыток для судебного сервиса
+    MAX_ENRICHMENT_THREADS = 6  # Максимальное количество потоков для обогащения
+    
+    # Настройки для генерации тестовых данных
+    MOCK_DEBT_PROBABILITY = 0.7  # Вероятность наличия долга в тестовом режиме
+    MOCK_PROPERTY_PROBABILITY = 0.6  # Вероятность наличия имущества
+    
     # Директории
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'data', 'uploads')

@@ -113,52 +113,66 @@ def start_scoring():
         }), 500
 
 def process_scoring(file_paths, params):
-    """Основной процесс скоринга"""
+    """Основной процесс скоринга с улучшенной обработкой ошибок"""
     # Шаг 1: Загрузка и нормализация данных
     logger.info("Начало обработки данных")
-    data_loader = DataLoader()
-    df = data_loader.load_data(file_paths)
-    
-    normalizer = DataNormalizer()
-    df = normalizer.normalize(df)
-    
-    deduplicator = Deduplicator()
-    df = deduplicator.deduplicate(df)
-    
-    # Фильтрация по регионам (если есть столбец region)
-    if params['regions'] and 'region' in df.columns:
-        df = df[df['region'].isin(params['regions'])]
-    
-    # Конвертация в список словарей для дальнейшей обработки
-    leads = df.to_dict('records')
-    
-    # Шаг 2: Обогащение данных (параллельная обработка)
+    try:
+        data_loader = DataLoader()
+        df = data_loader.load_data(file_paths)
+        
+        normalizer = DataNormalizer()
+        df = normalizer.normalize(df)
+        
+        deduplicator = Deduplicator()
+        df = deduplicator.deduplicate(df)
+        
+        # Фильтрация по регионам
+        if params['regions']:
+            df = df[df['region'].isin(params['regions'])]
+        
+        leads = df.to_dict('records')
+        logger.info(f"Загружено {len(leads)} лидов после обработки")
+    except Exception as e:
+        logger.error(f"Ошибка обработки данных: {str(e)}", exc_info=True)
+        return "error_processing.csv"
+
+    # Шаг 2: Обогащение данных
     logger.info(f"Начато обогащение данных для {len(leads)} лидов")
     enriched_data = []
     errors = []
     
+    
+    # Функция для обработки одного лида
     def enrich_lead(lead):
         try:
-            return data_enricher.enrich(lead)
+            start_time = time.time()
+            result = data_enricher.enrich(lead)
+            duration = time.time() - start_time
+            logger.debug(f"Обогащение лида {lead.get('phone')} заняло {duration:.2f} сек")
+            return result
         except Exception as e:
-            # Используем телефон, если ФИО нет
-            fio = lead.get('fio', '')
-            if not fio:
-                fio = f"Телефон: {lead.get('phone', '')}"
-                
             errors.append({
-                'fio': fio,
+                'fio': lead.get('fio', ''),
                 'inn': lead.get('inn', ''),
                 'error': str(e),
                 'service': 'DataEnrichment'
             })
-            logger.error(f"Ошибка обогащения: {fio} - {str(e)}")
+            logger.error(f"Ошибка обогащения: {lead.get('fio', '')} - {str(e)}")
             return lead
     
     # Параллельная обработка с ограничением потоков
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        results = executor.map(enrich_lead, leads)
-        enriched_data = [result for result in results if result is not None]
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(enrich_lead, lead) for lead in leads]
+            
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    result = future.result()
+                    enriched_data.append(result)
+                except Exception as e:
+                    logger.error(f"Ошибка в потоке обогащения: {str(e)}")
+    except Exception as e:
+        logger.critical(f"Критическая ошибка при параллельном обогащении: {str(e)}")
     
     # Сохранение ошибок в БД
     for error in errors:
@@ -167,18 +181,27 @@ def process_scoring(file_paths, params):
     # Шаг 3: Расчет скоринга
     logger.info("Расчет скоринга")
     scoring_results = []
+    filtered_count = 0
+    
     for lead in enriched_data:
         try:
+            # Пропускаем лиды без телефона
+            if not lead.get('phone'):
+                continue
+                
             score, reasons = calculate_score(lead, params['min_debt'])
             
             # Применение ML-модели если выбрано
             if params['use_ml_model']:
-                ml_score = predict_proba(lead)
-                # Комбинируем rule-based и ML оценки
-                final_score = (score * 0.7) + (ml_score * 0.3)
-                lead['ml_score'] = ml_score
-                reasons.append(f"ML-оценка: {ml_score:.0f}")
-                score = final_score
+                try:
+                    ml_score = predict_proba(lead)
+                    # Комбинируем rule-based и ML оценки
+                    final_score = (score * 0.7) + (ml_score * 0.3)
+                    lead['ml_score'] = ml_score
+                    reasons.append(f"ML-оценка: {ml_score:.0f}")
+                    score = final_score
+                except Exception as e:
+                    logger.error(f"Ошибка ML-модели: {str(e)}")
             
             lead['score'] = min(100, max(0, int(score)))
             lead['reasons'] = reasons
@@ -187,52 +210,72 @@ def process_scoring(file_paths, params):
             
             # Применение фильтров
             if should_exclude_lead(lead, params):
+                filtered_count += 1
                 continue
                 
             scoring_results.append(lead)
         except Exception as e:
-            # Используем телефон, если ФИО нет
-            fio = lead.get('fio', '')
-            if not fio:
-                fio = f"Телефон: {lead.get('phone', '')}"
-            logger.error(f"Ошибка скоринга для лида {fio}: {str(e)}")
+            logger.error(f"Ошибка скоринга для лида {lead.get('fio', '')}: {str(e)}")
     
     # Сортировка по убыванию скоринга
     scoring_results.sort(key=lambda x: x['score'], reverse=True)
     
+    # Логирование результатов фильтрации
+    logger.info(f"После фильтрации осталось {len(scoring_results)} из {len(enriched_data)} лидов")
+    if filtered_count > 0:
+        logger.info(f"Отфильтровано {filtered_count} лидов по заданным критериям")
+    
     # Шаг 4: Формирование результата
     if scoring_results:
         logger.info(f"Формирование результата, найдено {len(scoring_results)} целевых лидов")
-        output_data = prepare_output(scoring_results)
-        result_file = save_results(output_data, app.config['RESULT_FOLDER'])
-        
-        # Сохранение в БД
-        db_instance.save_leads(scoring_results)
-        db_instance.save_scoring_history(output_data)
     else:
-        logger.info("Нет лидов, удовлетворяющих критериям фильтрации")
-        # Создаем пустой файл с информационным сообщением
-        result_file = "no_results.csv"
-        no_results_path = safe_join(app.config['RESULT_FOLDER'], result_file)
-        with open(no_results_path, 'w', encoding='utf-8') as f:
-            f.write("Нет данных, удовлетворяющих критериям фильтрации")
+        logger.info("Целевые лиды не найдены")
+        # Создаем запись, чтобы пользователь не получил ошибку
+        scoring_results = [{
+            'phone': 'Нет данных',
+            'fio': 'Нет подходящих лидов',
+            'score': 0,
+            'reasons': ['Попробуйте изменить фильтры'],
+            'is_target': 0,
+            'group': 'no_data'
+        }]
+    
+    output_data = prepare_output(scoring_results)
+    result_file = save_results(output_data, app.config['RESULT_FOLDER'])
+    
+    # Сохранение в БД только реальных лидов
+    if scoring_results and scoring_results[0]['phone'] != 'Нет данных':
+        try:
+            db_instance.save_leads(scoring_results)
+            db_instance.save_scoring_history(output_data)
+        except Exception as e:
+            logger.error(f"Ошибка сохранения в БД: {str(e)}")
     
     return result_file
 
 def should_exclude_lead(lead, params):
-    """Проверка исключения лида по фильтрам"""
-    if params['exclude_bankrupt'] and lead.get('is_bankrupt'):
-        return True
-    if params['exclude_no_debt'] and lead.get('debt_amount', 0) == 0:
-        return True
-    if params['only_with_property'] and not lead.get('has_property'):
-        return True
-    if params['only_bank_mfo_debts'] and not lead.get('has_bank_mfo_debt'):
-        return True
-    if params['only_recent_court_orders'] and not lead.get('has_recent_court_order'):
-        return True
-    if params['only_active_inn'] and not lead.get('is_inn_active'):
-        return True
+    """Проверка исключения лида по фильтрам с подробным логированием"""
+    filters = [
+        ('exclude_bankrupt', 'is_bankrupt', "исключен как банкрот"),
+        ('exclude_no_debt', 'debt_amount', "исключен из-за отсутствия долга"),
+        ('only_with_property', 'has_property', "исключен из-за отсутствия имущества"),
+        ('only_bank_mfo_debts', 'has_bank_mfo_debt', "исключен: нет долгов банкам/МФО"),
+        ('only_recent_court_orders', 'has_recent_court_order', "исключен: нет свежих судебных приказов"),
+        ('only_active_inn', 'is_inn_active', "исключен: неактивный ИНН")
+    ]
+    
+    for param_key, lead_key, reason in filters:
+        if params[param_key]:
+            # Для фильтров "only_..." исключаем, если значение False
+            if param_key.startswith('only_'):
+                if not lead.get(lead_key, False):
+                    logger.debug(f"Лид {lead.get('phone')} {reason}")
+                    return True
+            else:
+                # Для фильтров "exclude_..." исключаем, если значение True
+                if lead.get(lead_key, False):
+                    logger.debug(f"Лид {lead.get('phone')} {reason}")
+                    return True
     return False
 
 @app.route('/download/<filename>')

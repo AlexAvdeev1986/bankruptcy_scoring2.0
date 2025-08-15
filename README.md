@@ -228,6 +228,9 @@ python app.py
 export MOCK_MODE=false
 python app.py
 
+gunicorn -w 4 -b 0.0.0.0:8000 app:app
+
+
 # Важные директории проекта
 Директория	Назначение
 data/uploads/	Загружаем CSV-файлы
