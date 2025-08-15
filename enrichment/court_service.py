@@ -3,10 +3,12 @@ import requests
 import logging
 import time
 import random
+import socket
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from requests.packages.urllib3.exceptions import NameResolutionError
 
 class CourtService:
     def __init__(self, proxy_rotator, config):
@@ -14,8 +16,8 @@ class CourtService:
         self.config = config
         self.logger = logging.getLogger('CourtService')
         self.base_url = config['COURT_URL']
-        self.retry_count = 5  # Увеличили количество попыток
-        self.timeout = 30     # Уменьшили таймаут одного запроса
+        self.retry_count = config.get('COURT_RETRIES', 8)
+        self.timeout = config.get('COURT_TIMEOUT', 60)
         self.cache = {}
         self.mock_mode = os.getenv('MOCK_MODE', 'false').lower() == 'true'
         
@@ -23,13 +25,52 @@ class CourtService:
         self.session = requests.Session()
         retry_strategy = Retry(
             total=self.retry_count,
-            backoff_factor=0.5,
+            backoff_factor=1.5,
             status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET"]
+            allowed_methods=["GET"],
+            respect_retry_after_header=True
         )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
+        adapter = HTTPAdapter(
+            max_retries=retry_strategy,
+            pool_connections=100,
+            pool_maxsize=100
+        )
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
+        
+        # Настройка DNS-резолвера
+        self.dns_cache = {}
+        self.dns_cache_timeout = 300  # 5 минут
+        
+        # Настройка параметров соединения
+        self.session.headers.update({
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
+            'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Referer': 'https://sudrf.ru/'
+        })
+    
+    def resolve_dns(self, hostname):
+        """Кеширующее DNS-разрешение с обработкой ошибок"""
+        now = time.time()
+        
+        # Проверка кеша
+        if hostname in self.dns_cache:
+            ip, timestamp = self.dns_cache[hostname]
+            if now - timestamp < self.dns_cache_timeout:
+                return ip
+        
+        try:
+            # Разрешение DNS с таймаутом
+            self.logger.info(f"Разрешение DNS для {hostname}")
+            ip = socket.gethostbyname(hostname)
+            self.dns_cache[hostname] = (ip, now)
+            return ip
+        except socket.gaierror as e:
+            self.logger.error(f"Ошибка DNS-разрешения: {str(e)}")
+            return None
     
     def enrich(self, lead: dict) -> dict:
         """Проверка наличия судебных приказов с улучшенной обработкой ошибок"""
@@ -55,23 +96,36 @@ class CourtService:
             if lead.get('dob'):
                 params['birth_date'] = lead['dob'].strftime('%Y-%m-%d')
             
+            # Разрешение DNS
+            hostname = "sudrf.ru"
+            ip_address = self.resolve_dns(hostname)
+            
+            if not ip_address:
+                self.logger.error(f"Не удалось разрешить DNS для {hostname}")
+                return lead
+                
+            # Формирование URL с IP-адресом
+            url = f"http://{ip_address}/index.php"
+            
             # Попытка запроса
             proxy = self.proxy_rotator.get_proxy()
             headers = {
                 'User-Agent': self.proxy_rotator.get_user_agent(),
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Connection': 'keep-alive'
+                'Host': hostname  # Важно сохранить оригинальный Host
             }
             
+            start_time = time.time()
             response = self.session.get(
-                self.base_url,
+                url,
                 params=params,
                 proxies=proxy,
                 headers=headers,
                 timeout=self.timeout
             )
+            request_time = time.time() - start_time
             
             if response.status_code == 200:
+                self.logger.debug(f"Запрос к судебному сервису выполнен за {request_time:.2f} сек")
                 result = self.parse_response(response.text)
                 self.cache[cache_key] = result
                 return {**lead, **result}
@@ -82,8 +136,17 @@ class CourtService:
                 self.proxy_rotator.report_bad_proxy(proxy['http'])
                 return lead
                 
+        except NameResolutionError as nre:
+            self.logger.error(f"Критическая ошибка разрешения имени: {str(nre)}")
+            return lead
         except requests.exceptions.Timeout:
-            self.logger.warning("Таймаут при запросе к судебному сервису")
+            self.logger.warning(f"Таймаут при запросе к судебному сервису ({self.timeout} сек)")
+            return lead
+        except requests.exceptions.ConnectionError as ce:
+            self.logger.error(f"Ошибка соединения: {str(ce)}")
+            return lead
+        except requests.exceptions.RequestException as re:
+            self.logger.error(f"Ошибка запроса: {str(re)}")
             return lead
         except Exception as e:
             self.logger.error(f"Критическая ошибка CourtService: {str(e)}", exc_info=True)
@@ -135,7 +198,8 @@ class CourtService:
                         if order_date > three_months_ago:
                             result['has_recent_court_order'] = True
                             break  # Достаточно одного свежего приказа
-                    except:
+                    except Exception as date_error:
+                        self.logger.debug(f"Ошибка парсинга даты '{date_cell}': {str(date_error)}")
                         continue
         
         except Exception as e:

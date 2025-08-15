@@ -5,8 +5,8 @@ class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'secret_key')
     
     # Новые настройки
-    COURT_TIMEOUT = 25  # Таймаут для судебного сервиса
-    COURT_RETRIES = 4   # Количество попыток для судебного сервиса
+    COURT_TIMEOUT = 60  # Таймаут для судебного сервиса
+    COURT_RETRIES = 8   # Количество попыток для судебного сервиса
     MAX_ENRICHMENT_THREADS = 6  # Максимальное количество потоков для обогащения
     
     # Настройки для генерации тестовых данных
