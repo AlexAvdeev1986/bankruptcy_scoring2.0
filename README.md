@@ -201,7 +201,7 @@ psql -h localhost -U scoring_user -d bankruptcy_db -c "SELECT * FROM leads LIMIT
 
 pass
 
-new_password
+secure_password
 
 # Запуск миграций
 python scripts/run_migrations.py
