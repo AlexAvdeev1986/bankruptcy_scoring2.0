@@ -191,6 +191,12 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO scoring_user;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO scoring_user;
 "
 
+# Подключитесь к PostgreSQL
+sudo -u postgres psql -d bankruptcy_scoring
+
+# Выполните ALTER TABLE
+ALTER TABLE leads ADD COLUMN region VARCHAR(100);
+
 Проверка данных в БД:
 
 sudo -u postgres psql -d bankruptcy_scoring -c "SELECT * FROM scoring_history;"
@@ -228,6 +234,7 @@ python app.py
 export MOCK_MODE=false
 python app.py
 
+
 gunicorn -w 4 -b 0.0.0.0:8000 app:app
 
 
@@ -238,3 +245,14 @@ data/results/	Результаты скоринга (CSV)
 logs/errors/	Логи ошибок
 ml_model/	ML-модели
 database/migrations/	SQL-скрипты миграций
+
+
+Что это означает:
+Низкий скоринг (8/100) - все эти кандидаты получили очень низкий балл, что указывает на высокий риск или нецелесообразность работы с ними.
+
+Ключевая проблема: ИНН неактивен - основная причина низкого скоринга в том, что ИНН этих физических лиц или компаний не активен (аннулирован, заблокирован или не существует).
+
+ML-оценка (27/100) - машинное обучение также дало низкую оценку, подтверждая вывод rule-based системы.
+
+Группа "other" - эти лиды не попали ни в одну из специализированных групп (high_debt_recent_court, bank_only_no_property и т.д.).
+
