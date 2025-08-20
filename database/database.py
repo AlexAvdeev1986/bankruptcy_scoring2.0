@@ -5,6 +5,7 @@ from psycopg2 import sql
 from psycopg2.extras import DictCursor, execute_values
 from datetime import datetime
 from dotenv import load_dotenv
+from cachetools import TTLCache
 
 class Database:
     _instance = None
@@ -18,6 +19,7 @@ class Database:
     def initialize(self):
         self.conn = None
         self.logger = logging.getLogger('Database')
+        self.cache = TTLCache(maxsize=1000, ttl=3600)  # Кеш на 1 час
         self.connect()
     
     def connect(self):
@@ -122,10 +124,9 @@ class Database:
                     lead.get('has_court_order', False),
                     lead.get('is_inn_active', True),
                     lead.get('is_bankrupt', False),
-                    True
+                    True  # Исправленная опечатка: normalized -> True
                 ) for lead in leads]
                 
-                # В методе save_leads
                 query = """
                     INSERT INTO leads (
                         fio, phone, inn, dob, address, source, tags, email,
@@ -256,6 +257,30 @@ class Database:
                 return [{'name': row[0], 'count': row[1]} for row in cursor.fetchall()]
         except Exception as e:
             self.logger.error(f"Ошибка получения статистики: {str(e)}")
+            return []
+    
+    def get_training_data(self, limit=10000):
+        """Получение данных для обучения ML-модели"""
+        try:
+            with self.conn.cursor(cursor_factory=DictCursor) as cursor:
+                cursor.execute("""
+                    SELECT 
+                        debt_amount,
+                        debt_count,
+                        CASE WHEN has_property THEN 1 ELSE 0 END as has_property,
+                        CASE WHEN has_court_order THEN 1 ELSE 0 END as has_court_order,
+                        CASE WHEN is_inn_active THEN 1 ELSE 0 END as is_inn_active,
+                        CASE WHEN is_bankrupt THEN 1 ELSE 0 END as is_bankrupt,
+                        CASE WHEN score >= 50 THEN 1 ELSE 0 END as target
+                    FROM leads l
+                    JOIN scoring_history sh ON l.lead_id = sh.lead_id
+                    WHERE sh.scored_at > CURRENT_DATE - INTERVAL '6 months'
+                    LIMIT %s
+                """, (limit,))
+                
+                return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            self.logger.error(f"Ошибка получения данных для обучения: {str(e)}")
             return []
 
 # Синглтон для доступа к БД

@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 
 class Config:
     DEBUG = os.environ.get('DEBUG', 'False') == 'True'
@@ -48,4 +49,11 @@ class Config:
     
     # Настройки ML модели
     ML_MODEL_PATH = os.path.join(BASE_DIR, 'ml_model', 'model.pkl')
+    
+    # Настройки кеширования
+    CACHE_TTL = int(os.environ.get('CACHE_TTL', 3600))  # 1 час по умолчанию
+    CACHE_MAX_SIZE = int(os.environ.get('CACHE_MAX_SIZE', 1000))
+    
+    # Настройки пагинации
+    CHUNK_SIZE = int(os.environ.get('CHUNK_SIZE', 10000))
     

@@ -1,9 +1,9 @@
 import joblib
 import pandas as pd
-from datetime import datetime
 import logging
 import os
 from config import Config
+from scoring.rule_based_scorer import calculate_score
 
 # Настройка логгера
 logger = logging.getLogger('MLScorer')
@@ -28,6 +28,23 @@ def load_model():
             if os.path.exists(model_path) and os.path.getsize(model_path) > 1024:
                 model = joblib.load(model_path)
                 logger.info("ML модель успешно загружена")
+                
+                # Проверка валидности модели
+                test_features = pd.DataFrame([{
+                    'debt_amount': 100000,
+                    'debt_count': 2,
+                    'has_property': 1,
+                    'has_court_order': 0,
+                    'is_inn_active': 1,
+                    'is_bankrupt': 0
+                }], columns=ML_FEATURES)
+                
+                try:
+                    test_pred = model.predict_proba(test_features)
+                    logger.info("Модель прошла валидацию")
+                except Exception as e:
+                    logger.error(f"Модель не прошла валидацию: {str(e)}")
+                    model = None
             else:
                 logger.error(f"Файл модели не найден или пуст: {model_path}")
                 model = None
@@ -39,23 +56,14 @@ def load_model():
 def predict_proba(lead):
     """Прогнозирование с использованием ML-модели"""
     model = load_model()
+    
+    # Fallback на rule-based scoring при проблемах с моделью
     if model is None:
-        logger.warning("Используется fallback-оценка (50)")
-        return 50
+        logger.warning("Используется rule-based оценка из-за проблем с ML моделью")
+        score, _ = calculate_score(lead, 250000)  # Используем стандартный min_debt
+        return score
     
     try:
-        # Расчет возраста
-        def calculate_age(dob):
-            if not dob:
-                return 40
-            if isinstance(dob, str):
-                try:
-                    dob = datetime.strptime(dob, "%Y-%m-%d")
-                except ValueError:
-                    return 40
-            today = datetime.today()
-            return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-        
         # Подготовка признаков в правильном порядке
         feature_data = {
             'debt_amount': lead.get('debt_amount', 0),
@@ -71,10 +79,16 @@ def predict_proba(lead):
         
         # Предсказание
         probability = model.predict_proba(features)[0][1]
-        return int(probability * 100)
+        ml_score = int(probability * 100)
+        
+        logger.debug(f"ML оценка: {ml_score}")
+        return ml_score
+        
     except Exception as e:
         logger.error(f"Ошибка предсказания: {str(e)}")
-        return 50  # Нейтральное значение при ошибке
+        # Fallback на rule-based scoring при ошибке
+        score, _ = calculate_score(lead, 250000)
+        return score
 
 # Попытка загрузки модели при импорте
 try:
@@ -82,7 +96,7 @@ try:
     if model:
         logger.info("ML модель успешно загружена при инициализации")
     else:
-        logger.warning("Модель не загружена")
+        logger.warning("Модель не загружена, будет использоваться rule-based fallback")
 except Exception as e:
     logger.error(f"Ошибка при загрузке модели: {str(e)}")
     

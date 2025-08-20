@@ -4,16 +4,24 @@ services:
   app:
     build: .
     container_name: scoring_app
-    command: gunicorn --bind 0.0.0.0:5000 --workers 4 app:app
+    command: gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 app:app
     volumes:
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./ml_model:/app/ml_model
     ports:
       - "5000:5000"
     environment:
       - DB_HOST=db
-      - MOCK_MODE=${MOCK_MODE:-false}  # Добавлено
-      - PROXY_LIST=${PROXY_LIST:-}     # Добавлено
+      - DB_NAME=bankruptcy_scoring
+      - DB_USER=scoring_user
+      - DB_PASSWORD=secure_password
+      - MOCK_MODE=${MOCK_MODE:-false}
+      - PROXY_LIST=${PROXY_LIST:-}
+      - LOG_LEVEL=INFO
+      - CACHE_TTL=3600
+      - CACHE_MAX_SIZE=1000
+      - CHUNK_SIZE=10000
     depends_on:
       - db
     networks:
@@ -28,13 +36,26 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_password}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./database/migrations:/docker-entrypoint-initdb.d
     networks:
       - scoring_network
     ports:
       - "5432:5432"
+
+  redis:
+    image: redis:alpine
+    container_name: scoring_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - scoring_network
 
 networks:
   scoring_network:
 
 volumes:
   pgdata:
+  redisdata:
+  

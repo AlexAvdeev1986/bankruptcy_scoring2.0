@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 from catboost import CatBoostClassifier
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, roc_auc_score
 import joblib
 import traceback
 import shutil
@@ -30,34 +31,65 @@ logger.addHandler(console_handler)
 logger.addHandler(file_handler)
 
 def fetch_training_data():
-    """Получение данных для обучения с улучшенным запросом"""
-    logger.info("Начало получения данных для обучения")
-    df = pd.DataFrame()
+    """Получение реальных данных для обучения из БД"""
+    logger.info("Начало получения данных для обучения из БД")
     
     try:
-        # Имитация подключения к БД
-        # В реальной реализации здесь будет запрос к базе
-        logger.debug("Подключение к БД установлено")
+        from database.database import db_instance
         
-        # Генерация разнообразных тестовых данных
-        n_samples = 200
-        np.random.seed(42)
+        # Получение данных из БД
+        training_data = db_instance.get_training_data(limit=10000)
         
-        data = {
-            'debt_amount': np.random.exponential(scale=300000, size=n_samples),
-            'debt_count': np.random.randint(1, 10, size=n_samples),
-            'has_property': np.random.randint(0, 2, size=n_samples),
-            'has_court_order': np.random.randint(0, 2, size=n_samples),
-            'is_inn_active': np.random.randint(0, 2, size=n_samples),
-            'is_bankrupt': np.random.randint(0, 2, size=n_samples),
-            'target': np.random.randint(0, 2, size=n_samples)
-        }
-        df = pd.DataFrame(data)
-        logger.info(f"Сгенерировано {len(df)} тестовых записей")
+        if not training_data:
+            logger.warning("Нет данных для обучения в БД. Используются демо-данные.")
+            return generate_demo_data()
+        
+        df = pd.DataFrame(training_data)
+        logger.info(f"Получено {len(df)} записей для обучения из БД")
+        
+        # Проверка баланса классов
+        target_distribution = df['target'].value_counts(normalize=True)
+        logger.info(f"Распределение целевой переменной:\n{target_distribution}")
+        
+        return df
             
     except Exception as e:
         logger.error(f"Ошибка при получении данных: {str(e)}")
         logger.debug(traceback.format_exc())
+        return generate_demo_data()
+
+def generate_demo_data():
+    """Генерация демо-данных только при отсутствии реальных"""
+    logger.info("Генерация демо-данных для обучения")
+    
+    n_samples = 1000
+    np.random.seed(42)
+    
+    # Более реалистичные демо-данные
+    data = {
+        'debt_amount': np.random.exponential(scale=300000, size=n_samples),
+        'debt_count': np.random.poisson(lam=3, size=n_samples),
+        'has_property': np.random.binomial(1, 0.6, size=n_samples),
+        'has_court_order': np.random.binomial(1, 0.4, size=n_samples),
+        'is_inn_active': np.random.binomial(1, 0.8, size=n_samples),
+        'is_bankrupt': np.random.binomial(1, 0.2, size=n_samples),
+    }
+    
+    # Создание целевой переменной на основе логики
+    bankruptcy_risk = (
+        0.3 * (data['debt_amount'] > 500000) +
+        0.2 * (data['debt_count'] > 5) +
+        0.1 * (data['has_property'] == 0) +
+        0.2 * (data['has_court_order'] == 1) +
+        0.1 * (data['is_inn_active'] == 0) +
+        0.1 * (data['is_bankrupt'] == 1) +
+        np.random.normal(0, 0.1, n_samples)
+    )
+    
+    data['target'] = (bankruptcy_risk > 0.5).astype(int)
+    
+    df = pd.DataFrame(data)
+    logger.info(f"Сгенерировано {len(df)} демо-записей")
     
     return df
 
@@ -110,24 +142,37 @@ def train_and_save_model(X_train, X_test, y_train, y_test):
     logger.info("Начало обучения модели")
     
     try:
-        # Упрощенные параметры для тестовой модели
+        # Параметры модели
         model_params = {
-            'iterations': 50,
+            'iterations': 100,
             'learning_rate': 0.1,
-            'depth': 4,
+            'depth': 6,
             'eval_metric': 'AUC',
             'random_seed': 42,
-            'verbose': False
+            'verbose': False,
+            'early_stopping_rounds': 10
         }
         
         # Создание и обучение модели
         model = CatBoostClassifier(**model_params)
-        model.fit(X_train, y_train)
+        model.fit(X_train, y_train, eval_set=(X_test, y_test))
         
         # Оценка качества модели
-        train_score = model.score(X_train, y_train)
-        test_score = model.score(X_test, y_test)
-        logger.info(f"Точность модели: train={train_score:.4f}, test={test_score:.4f}")
+        train_pred = model.predict(X_train)
+        test_pred = model.predict(X_test)
+        
+        train_accuracy = accuracy_score(y_train, train_pred)
+        test_accuracy = accuracy_score(y_test, test_pred)
+        
+        train_auc = roc_auc_score(y_train, model.predict_proba(X_train)[:, 1])
+        test_auc = roc_auc_score(y_test, model.predict_proba(X_test)[:, 1])
+        
+        logger.info(f"Точность модели: train={train_accuracy:.4f}, test={test_accuracy:.4f}")
+        logger.info(f"AUC модели: train={train_auc:.4f}, test={test_auc:.4f}")
+        
+        # Проверка на переобучение
+        if train_accuracy - test_accuracy > 0.15:
+            logger.warning("Возможно переобучение модели!")
         
         # Сохранение модели
         model_path = os.path.join(os.path.dirname(__file__), 'model.pkl')

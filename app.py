@@ -142,7 +142,6 @@ def process_scoring(file_paths, params):
     enriched_data = []
     errors = []
     
-    
     # Функция для обработки одного лида
     def enrich_lead(lead):
         try:
@@ -163,7 +162,9 @@ def process_scoring(file_paths, params):
     
     # Параллельная обработка с ограничением потоков
     try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=app.config['MAX_ENRICHMENT_THREADS']
+        ) as executor:
             futures = [executor.submit(enrich_lead, lead) for lead in leads]
             
             for future in concurrent.futures.as_completed(futures):
@@ -325,6 +326,25 @@ def group_stats():
     """Статистика по группам"""
     stats = db_instance.get_group_stats()
     return jsonify(stats)
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    try:
+        # Проверка подключения к БД
+        db_instance.conn.cursor().execute("SELECT 1")
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'database': 'disconnected',
+            'error': str(e),
+            'timestamp': datetime.now().isoformat()
+        }), 500
 
 if __name__ == '__main__':
     # Создание необходимых директорий
